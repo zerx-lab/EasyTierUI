@@ -1,0 +1,222 @@
+//! Every user-facing string, in zh-CN and en.
+//!
+//! [`Strings`] has one field per string, so a language without a string does not compile. Write each language
+//! natively; EasyTier's terms stay consistent (network 网络, node 节点, peer 对等节点, core 内核, control plane 控制平面).
+
+mod en;
+mod zh_cn;
+
+/// A language the UI is written in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Language {
+    /// 简体中文.
+    ZhCn,
+    /// English.
+    En,
+}
+
+impl Language {
+    /// The UI language for a BCP 47 tag (`zh-Hans-CN`, `zh-TW`, `en-US`): Chinese for every `zh` tag, English
+    /// otherwise.
+    pub fn from_tag(tag: &str) -> Self {
+        let primary = tag.split(['-', '_']).next().unwrap_or_default();
+        if primary.eq_ignore_ascii_case("zh") {
+            Self::ZhCn
+        } else {
+            Self::En
+        }
+    }
+
+    /// Its strings.
+    pub fn strings(self) -> &'static Strings {
+        match self {
+            Self::ZhCn => &zh_cn::STRINGS,
+            Self::En => &en::STRINGS,
+        }
+    }
+}
+
+/// The language the user chose in Settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LanguageChoice {
+    /// The system's language.
+    #[default]
+    System,
+    /// One language, whatever the system's.
+    Fixed(Language),
+}
+
+impl LanguageChoice {
+    /// Every choice, in the order Settings lists them.
+    pub const ALL: [LanguageChoice; 3] = [
+        LanguageChoice::System,
+        LanguageChoice::Fixed(Language::ZhCn),
+        LanguageChoice::Fixed(Language::En),
+    ];
+
+    /// The language to show, given the system's locale tag.
+    pub fn resolve(self, system_tag: &str) -> Language {
+        match self {
+            Self::System => Language::from_tag(system_tag),
+            Self::Fixed(language) => language,
+        }
+    }
+
+    /// How it is kept in storage.
+    pub fn as_key(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Fixed(Language::ZhCn) => "zh-CN",
+            Self::Fixed(Language::En) => "en",
+        }
+    }
+
+    /// The choice kept as `key`; `None` for a value this version does not know.
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|choice| choice.as_key() == key)
+    }
+}
+
+/// Picks one string of [`Strings`]: how callers name a string independently of the language.
+pub type Pick = fn(&'static Strings) -> &'static str;
+
+/// The UI's strings in one language.
+#[derive(Debug)]
+pub struct Strings {
+    /// The product name.
+    pub app_name: &'static str,
+    /// Back to the previous page.
+    pub back: &'static str,
+    /// The sidebar toggle while the sidebar shows (for screen readers and tests).
+    pub sidebar_hide: &'static str,
+    /// The sidebar toggle while the sidebar is hidden.
+    pub sidebar_show: &'static str,
+
+    /// Role: this device in the mesh.
+    pub role_node: &'static str,
+    /// Role: managing an easytier-web server.
+    pub role_console: &'static str,
+    /// Role: hosting or deploying easytier-web.
+    pub role_host: &'static str,
+
+    /// Page: the node's networks.
+    pub page_networks: &'static str,
+    /// Page: the node's peers.
+    pub page_peers: &'static str,
+    /// Page: a server's machines.
+    pub page_machines: &'static str,
+    /// Page: a server's networks.
+    pub page_server_networks: &'static str,
+    /// Page: a server's credentials.
+    pub page_credentials: &'static str,
+    /// Page: the hosted control plane's state.
+    pub page_host_status: &'static str,
+    /// Page: first-run hardening of the hosted control plane.
+    pub page_hardening: &'static str,
+    /// Page: server deployment files.
+    pub page_deployment: &'static str,
+    /// Page: the app's settings.
+    pub page_settings: &'static str,
+
+    /// The target switcher, for screen readers.
+    pub target_switcher: &'static str,
+    /// The name of this device as a target.
+    pub target_this_device: &'static str,
+    /// The name of the server that served the web build.
+    pub target_this_server: &'static str,
+    /// Target state: reachable, nothing running.
+    pub status_stopped: &'static str,
+    /// Target state: not connected yet.
+    pub status_not_connected: &'static str,
+
+    /// Capability notice: a browser cannot be a node.
+    pub notice_browser_node: &'static str,
+    /// Its remote alternative.
+    pub notice_browser_node_action: &'static str,
+    /// Capability notice: a browser cannot run easytier-web.
+    pub notice_browser_host: &'static str,
+    /// Its remote alternative.
+    pub notice_browser_host_action: &'static str,
+    /// Capability notice: a phone cannot host a control plane.
+    pub notice_mobile_host: &'static str,
+    /// Its remote alternative.
+    pub notice_mobile_host_action: &'static str,
+
+    /// Networks page, no profiles.
+    pub networks_empty_title: &'static str,
+    /// What will show there.
+    pub networks_empty_body: &'static str,
+    /// Peers page, no network running.
+    pub peers_empty_title: &'static str,
+    /// What will show there.
+    pub peers_empty_body: &'static str,
+    /// Console pages with this device as the target.
+    pub console_no_server_title: &'static str,
+    /// What the console does and where a server is chosen.
+    pub console_no_server_body: &'static str,
+    /// Console pages with a server the app has not connected to.
+    pub console_not_connected_title: &'static str,
+    /// What connecting shows.
+    pub console_not_connected_body: &'static str,
+    /// Host status page on a desktop, nothing hosted.
+    pub host_stopped_title: &'static str,
+    /// How hosting starts, and its defaults.
+    pub host_stopped_body: &'static str,
+    /// Hardening page, nothing hosted.
+    pub hardening_idle_title: &'static str,
+    /// What it will check.
+    pub hardening_idle_body: &'static str,
+    /// Deployment page, nothing generated.
+    pub deployment_empty_title: &'static str,
+    /// What it generates, and that nothing is applied.
+    pub deployment_empty_body: &'static str,
+
+    /// Settings: the language section.
+    pub settings_language: &'static str,
+    /// Language choice: follow the system.
+    pub language_system: &'static str,
+    /// Language choice: Chinese (always written in Chinese).
+    pub language_zh_cn: &'static str,
+    /// Language choice: English (always written in English).
+    pub language_en: &'static str,
+    /// Settings: the about section.
+    pub settings_about: &'static str,
+    /// The app's version, a label before the number.
+    pub settings_version: &'static str,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_chinese_tag_picks_chinese() {
+        for tag in ["zh", "zh-CN", "zh-Hans-CN", "zh-TW", "zh_HK", "ZH-hant"] {
+            assert_eq!(Language::from_tag(tag), Language::ZhCn, "{tag}");
+        }
+    }
+
+    #[test]
+    fn other_tags_fall_back_to_english() {
+        for tag in ["en-US", "de-DE", "ja", "", "zhx"] {
+            assert_eq!(Language::from_tag(tag), Language::En, "{tag}");
+        }
+    }
+
+    #[test]
+    fn a_fixed_choice_wins_over_the_system() {
+        assert_eq!(
+            LanguageChoice::Fixed(Language::En).resolve("zh-CN"),
+            Language::En
+        );
+        assert_eq!(LanguageChoice::System.resolve("zh-CN"), Language::ZhCn);
+    }
+
+    #[test]
+    fn stored_choices_round_trip_and_unknown_ones_are_rejected() {
+        for choice in LanguageChoice::ALL {
+            assert_eq!(LanguageChoice::from_key(choice.as_key()), Some(choice));
+        }
+        assert_eq!(LanguageChoice::from_key("fr"), None);
+    }
+}

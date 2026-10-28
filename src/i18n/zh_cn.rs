@@ -1,0 +1,59 @@
+//! 简体中文.
+
+use super::Strings;
+
+pub(super) static STRINGS: Strings = Strings {
+    app_name: "EasyTierUI",
+    back: "返回",
+    sidebar_hide: "隐藏侧边栏",
+    sidebar_show: "显示侧边栏",
+
+    role_node: "节点",
+    role_console: "控制台",
+    role_host: "控制平面",
+
+    page_networks: "网络",
+    page_peers: "对等节点",
+    page_machines: "设备",
+    page_server_networks: "网络",
+    page_credentials: "凭据",
+    page_host_status: "状态",
+    page_hardening: "安全加固",
+    page_deployment: "部署",
+    page_settings: "设置",
+
+    target_switcher: "切换目标",
+    target_this_device: "本机",
+    target_this_server: "本服务器",
+    status_stopped: "未运行",
+    status_not_connected: "未连接",
+
+    notice_browser_node: "浏览器无法加入组网。",
+    notice_browser_node_action: "管理本服务器的节点",
+    notice_browser_host: "浏览器无法运行 EasyTier 程序。本服务器的控制平面通过部署文件修改。",
+    notice_browser_host_action: "打开部署",
+    notice_mobile_host: "此设备无法托管控制平面。",
+    notice_mobile_host_action: "部署控制平面",
+
+    networks_empty_title: "此设备上还没有网络",
+    networks_empty_body: "创建或加入的网络会显示在这里，包括运行状态和虚拟 IP。",
+    peers_empty_title: "没有运行中的网络",
+    peers_empty_body: "此设备上的网络运行后，对等节点会显示在这里。",
+    console_no_server_title: "未选择服务器",
+    console_no_server_body: "控制台管理 easytier-web 服务器上的设备、网络和凭据。请在目标切换器中选择服务器。",
+    console_not_connected_title: "尚未连接到本服务器",
+    console_not_connected_body: "登录后，这里会显示它的设备、网络和凭据。",
+    host_stopped_title: "此设备上没有运行控制平面",
+    host_stopped_body: "在本机托管 easytier-web 需要手动开启。启动前会替换默认账号，API 只监听本机回环地址。",
+    hardening_idle_title: "暂无需要加固的项目",
+    hardening_idle_body: "控制平面在本机运行后，这里会检查默认密码、注册开关和对外暴露的端口。",
+    deployment_empty_title: "尚未生成部署文件",
+    deployment_empty_body: "这里会按安全默认值生成服务器的 Docker Compose、systemd 和反向代理文件。本应用不会直接改动服务器。",
+
+    settings_language: "语言",
+    language_system: "跟随系统",
+    language_zh_cn: "简体中文",
+    language_en: "English",
+    settings_about: "关于",
+    settings_version: "版本",
+};

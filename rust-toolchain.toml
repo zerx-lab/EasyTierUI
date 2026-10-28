@@ -1,0 +1,14 @@
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+# Every platform `nsh run` / `nsh package` targets besides this machine's
+# desktop: iOS (devices, simulator, Mac Catalyst), Android, the web.
+targets = [
+    "aarch64-apple-darwin",
+    "aarch64-apple-ios-macabi",
+    "aarch64-apple-ios-sim",
+    "aarch64-apple-ios",
+    "aarch64-linux-android",
+    "x86_64-linux-android",
+    "wasm32-unknown-unknown",
+]

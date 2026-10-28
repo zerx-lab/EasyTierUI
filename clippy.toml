@@ -1,0 +1,24 @@
+# Clippy configuration for the lints in Cargo.toml `[lints.clippy]`.
+# Tests may panic: a failed unwrap there is a failed test, not a crashed client.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = false
+
+# Methods that panic on a byte offset off a char boundary (or past the end).
+# Peer names, hostnames and URLs come from users and the network: prove the
+# offset (`is_char_boundary`, `char_indices`) or use the checked form.
+disallowed-methods = [
+    { path = "std::string::String::insert", reason = "panics off a char boundary", replacement = "check `is_char_boundary` first" },
+    { path = "std::string::String::insert_str", reason = "panics off a char boundary", replacement = "check `is_char_boundary` first" },
+    { path = "std::string::String::remove", reason = "panics off a char boundary or at the end" },
+    { path = "std::string::String::replace_range", reason = "panics off a char boundary" },
+    { path = "std::string::String::drain", reason = "panics off a char boundary" },
+    { path = "std::string::String::split_off", reason = "panics off a char boundary" },
+    { path = "std::string::String::truncate", reason = "panics off a char boundary" },
+    { path = "str::split_at", reason = "panics off a char boundary", replacement = "str::split_at_checked" },
+    { path = "str::split_at_mut", reason = "panics off a char boundary", replacement = "str::split_at_mut_checked" },
+    { path = "std::process::abort", reason = "aborts the client; return an error or log and skip instead" },
+]
