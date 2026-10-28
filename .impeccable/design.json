@@ -1,0 +1,455 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T13:59:40+00:00",
+  "title": "Design System: EasyTierUI",
+  "extensions": {
+    "colorMeta": {
+      "cobalt": {
+        "role": "primary",
+        "displayName": "Cobalt Line",
+        "canonical": "#3156d3",
+        "cssVar": "theme.json primary (light)"
+      },
+      "cobalt-glow": {
+        "role": "primary",
+        "displayName": "Cobalt Glow",
+        "canonical": "#7896ff",
+        "cssVar": "theme.json primary (dark)"
+      },
+      "on-cobalt": {
+        "role": "primary",
+        "displayName": "On Cobalt",
+        "canonical": "#ffffff",
+        "cssVar": "theme.json primary-foreground (light)"
+      },
+      "on-cobalt-glow": {
+        "role": "primary",
+        "displayName": "On Cobalt Glow",
+        "canonical": "#0b1020",
+        "cssVar": "theme.json primary-foreground (dark)"
+      },
+      "lamp-green": {
+        "role": "secondary",
+        "displayName": "Lamp Green",
+        "canonical": "#146f46",
+        "cssVar": "theme.json success (light); tint success-muted"
+      },
+      "lamp-green-glow": {
+        "role": "secondary",
+        "displayName": "Lamp Green Glow",
+        "canonical": "#3fd394",
+        "cssVar": "theme.json success (dark)"
+      },
+      "relay-amber": {
+        "role": "secondary",
+        "displayName": "Relay Amber",
+        "canonical": "#9a5b06",
+        "cssVar": "theme.json warning (light); tint warning-muted"
+      },
+      "relay-amber-glow": {
+        "role": "secondary",
+        "displayName": "Relay Amber Glow",
+        "canonical": "#f0b546",
+        "cssVar": "theme.json warning (dark)"
+      },
+      "fault-red": {
+        "role": "secondary",
+        "displayName": "Fault Red",
+        "canonical": "#c1343a",
+        "cssVar": "theme.json destructive (light); tint destructive-muted"
+      },
+      "fault-red-glow": {
+        "role": "secondary",
+        "displayName": "Fault Red Glow",
+        "canonical": "#f0595e",
+        "cssVar": "theme.json destructive (dark)"
+      },
+      "on-fault-glow": {
+        "role": "secondary",
+        "displayName": "On Fault Glow",
+        "canonical": "#14070a",
+        "cssVar": "theme.json destructive-foreground (dark); light is #ffffff"
+      },
+      "series-teal": {
+        "role": "tertiary",
+        "displayName": "Series Teal",
+        "canonical": "#0f8f7a",
+        "cssVar": "theme.json chart-2 (light)"
+      },
+      "series-teal-glow": {
+        "role": "tertiary",
+        "displayName": "Series Teal Glow",
+        "canonical": "#2fd1b2",
+        "cssVar": "theme.json chart-2 (dark)"
+      },
+      "series-violet": {
+        "role": "tertiary",
+        "displayName": "Series Violet",
+        "canonical": "#7a4fd0",
+        "cssVar": "theme.json chart-3 (light)"
+      },
+      "series-violet-glow": {
+        "role": "tertiary",
+        "displayName": "Series Violet Glow",
+        "canonical": "#ab8cff",
+        "cssVar": "theme.json chart-3 (dark)"
+      },
+      "series-sky": {
+        "role": "tertiary",
+        "displayName": "Series Sky",
+        "canonical": "#0a7fb5",
+        "cssVar": "theme.json chart-4 (light)"
+      },
+      "series-sky-glow": {
+        "role": "tertiary",
+        "displayName": "Series Sky Glow",
+        "canonical": "#4cc0f0",
+        "cssVar": "theme.json chart-4 (dark)"
+      },
+      "series-slate": {
+        "role": "tertiary",
+        "displayName": "Series Slate",
+        "canonical": "#6b7280",
+        "cssVar": "theme.json chart-5 (light)"
+      },
+      "series-slate-glow": {
+        "role": "tertiary",
+        "displayName": "Series Slate Glow",
+        "canonical": "#9aa1af",
+        "cssVar": "theme.json chart-5 (dark)"
+      },
+      "paper-floor": {
+        "role": "neutral",
+        "displayName": "Paper Floor",
+        "canonical": "#f6f7f9",
+        "cssVar": "theme.json background (light)"
+      },
+      "paper-panel": {
+        "role": "neutral",
+        "displayName": "Paper Panel",
+        "canonical": "#ffffff",
+        "cssVar": "theme.json card, popover (light)"
+      },
+      "paper-sidebar": {
+        "role": "neutral",
+        "displayName": "Paper Sidebar",
+        "canonical": "#eef0f3",
+        "cssVar": "theme.json sidebar (light)"
+      },
+      "paper-well": {
+        "role": "neutral",
+        "displayName": "Paper Well",
+        "canonical": "#eceef2",
+        "cssVar": "theme.json secondary, muted (light)"
+      },
+      "paper-hover": {
+        "role": "neutral",
+        "displayName": "Paper Hover",
+        "canonical": "#e4e7ec",
+        "cssVar": "theme.json accent (light)"
+      },
+      "paper-rule": {
+        "role": "neutral",
+        "displayName": "Paper Rule",
+        "canonical": "#dfe2e8",
+        "cssVar": "theme.json border (light)"
+      },
+      "paper-field-edge": {
+        "role": "neutral",
+        "displayName": "Paper Field Edge",
+        "canonical": "#878d99",
+        "cssVar": "theme.json input (light)"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#16181d",
+        "cssVar": "theme.json foreground (light)"
+      },
+      "pencil": {
+        "role": "neutral",
+        "displayName": "Pencil",
+        "canonical": "#5b616e",
+        "cssVar": "theme.json muted-foreground (light)"
+      },
+      "night-floor": {
+        "role": "neutral",
+        "displayName": "Night Floor",
+        "canonical": "#0c0e12",
+        "cssVar": "theme.json background (dark)"
+      },
+      "night-sidebar": {
+        "role": "neutral",
+        "displayName": "Night Sidebar",
+        "canonical": "#111318",
+        "cssVar": "theme.json sidebar (dark)"
+      },
+      "night-panel": {
+        "role": "neutral",
+        "displayName": "Night Panel",
+        "canonical": "#14161b",
+        "cssVar": "theme.json card (dark)"
+      },
+      "night-raised": {
+        "role": "neutral",
+        "displayName": "Night Raised",
+        "canonical": "#181b21",
+        "cssVar": "theme.json popover (dark)"
+      },
+      "night-well": {
+        "role": "neutral",
+        "displayName": "Night Well",
+        "canonical": "#20232b",
+        "cssVar": "theme.json secondary, muted (dark)"
+      },
+      "night-hover": {
+        "role": "neutral",
+        "displayName": "Night Hover",
+        "canonical": "#272b34",
+        "cssVar": "theme.json accent (dark)"
+      },
+      "night-rule": {
+        "role": "neutral",
+        "displayName": "Night Rule",
+        "canonical": "#262a33",
+        "cssVar": "theme.json border (dark)"
+      },
+      "night-field-edge": {
+        "role": "neutral",
+        "displayName": "Night Field Edge",
+        "canonical": "#646a78",
+        "cssVar": "theme.json input (dark)"
+      },
+      "readout": {
+        "role": "neutral",
+        "displayName": "Readout",
+        "canonical": "#eceef2",
+        "cssVar": "theme.json foreground (dark)"
+      },
+      "dim-steel": {
+        "role": "neutral",
+        "displayName": "Dim Steel",
+        "canonical": "#9aa1af",
+        "cssVar": "theme.json muted-foreground (dark)"
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles on desktop and web; mobile uses the system header title."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Network names in cards, dialog titles, in-page section heads."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Desktop working size: rows, forms, dialogs, callouts."
+      },
+      "body-touch": {
+        "displayName": "Body Touch",
+        "purpose": "Working size on phones and tablets."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button and tab labels (16/24 on touch)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Sentence-case section labels, field captions, chip text; never uppercase or tracked."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Timestamps, helper text, versions."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Machine data: IPs, CIDRs, peer URLs, ids, versions, latency, bytes, logs; tabular figures."
+      },
+      "stat": {
+        "displayName": "Stat",
+        "purpose": "The one headline number of a network card."
+      }
+    },
+    "shadows": [
+      {
+        "name": "popup-lift",
+        "value": "NSH shadow_md (Tailwind shadow-md: 0 4px 6px -1px rgb(0 0 0 / .1), 0 2px 4px -2px rgb(0 0 0 / .1))",
+        "purpose": "Popovers, menus, tooltips, select lists."
+      },
+      {
+        "name": "dialog-lift",
+        "value": "NSH shadow_lg (Tailwind shadow-lg: 0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1))",
+        "purpose": "Desktop and web dialogs over a 40% foreground scrim."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": "150ms ease-out",
+        "purpose": "Fill, color and border changes of buttons, rows, switches, inputs."
+      },
+      {
+        "name": "overlay",
+        "value": "200ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Dialogs, popovers, sheets entering and leaving."
+      },
+      {
+        "name": "lamp-pulse",
+        "value": "1600ms ease-in-out, opacity 1 to 0.4, repeating",
+        "purpose": "Starting / Connecting lamp only; stops under reduce_motion()."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "single-column",
+        "value": "640pt window width: below it the desktop shell collapses to a NavStack"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Cobalt fill; the one primary action of a screen region.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Join network</button> <button class=\"ds-btn ds-btn-secondary\">Import</button> <button class=\"ds-btn ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:6px 12px;border:0;border-radius:6px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;font-size:14px;font-weight:500;line-height:20px;cursor:default;transition:background-color 150ms ease-out,color 150ms ease-out}.ds-btn:focus-visible{outline:2px solid #3156d3;outline-offset:2px}.ds-btn-primary{background:#3156d3;color:#fff}.ds-btn-secondary{background:#eceef2;color:#16181d}.ds-btn-secondary:hover{background:#e4e7ec}.ds-btn-ghost{background:transparent;color:#16181d}.ds-btn-ghost:hover{background:#e4e7ec}"
+    },
+    {
+      "name": "Status Lamp",
+      "kind": "custom",
+      "refersTo": "status-lamp",
+      "description": "8pt lamp plus its word; never color alone.",
+      "html": "<span class=\"ds-lamp-row\"><span class=\"ds-lamp ds-on\"></span>Direct</span> <span class=\"ds-lamp-row\"><span class=\"ds-lamp ds-relay\"></span>Relayed</span> <span class=\"ds-lamp-row\"><span class=\"ds-lamp ds-fail\"></span>Unreachable</span> <span class=\"ds-lamp-row\"><span class=\"ds-lamp ds-off\"></span>Stopped</span>",
+      "css": ".ds-lamp-row{display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;font-size:14px;line-height:20px;color:#16181d}.ds-lamp{width:8px;height:8px;border-radius:9999px}.ds-on{background:#146f46}.ds-relay{background:#9a5b06}.ds-fail{background:#c1343a}.ds-off{box-sizing:border-box;border:1.5px solid #5b616e}"
+    },
+    {
+      "name": "Network Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "One network: name and lamp, virtual IP in mono, stat, meta, primary action; flat with a hairline.",
+      "html": "<section class=\"ds-card\"><div class=\"ds-card-top\"><div><div class=\"ds-title\">home-lab</div><div class=\"ds-lamp-row\"><span class=\"ds-lamp ds-on\"></span>Running</div></div><button class=\"ds-btn ds-btn-secondary\">Stop</button></div><div class=\"ds-mono\">10.144.144.2/24</div><div class=\"ds-stat\">5<span class=\"ds-meta\"> peers online</span></div><div class=\"ds-meta\">core 2.6.4 · updated 2 s ago</div></section>",
+      "css": ".ds-card{width:320px;padding:16px;border:1px solid #dfe2e8;border-radius:8px;background:#fff;color:#16181d;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;display:flex;flex-direction:column;gap:8px}.ds-card-top{display:flex;justify-content:space-between;align-items:flex-start}.ds-title{font-size:16px;font-weight:600;line-height:24px}.ds-lamp-row{display:inline-flex;align-items:center;gap:6px;font-size:14px;line-height:20px}.ds-lamp{width:8px;height:8px;border-radius:9999px}.ds-on{background:#146f46}.ds-mono{font-family:ui-monospace,'SF Mono','Cascadia Mono',Consolas,'Roboto Mono',monospace;font-variant-numeric:tabular-nums;font-size:13px;line-height:20px}.ds-stat{font-family:ui-monospace,'SF Mono','Cascadia Mono',Consolas,'Roboto Mono',monospace;font-variant-numeric:tabular-nums;font-size:24px;font-weight:500;line-height:32px}.ds-meta{font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;font-size:12px;line-height:16px;color:#5b616e;font-weight:400}.ds-btn{height:32px;padding:6px 12px;border:0;border-radius:6px;font:500 14px/20px system-ui,sans-serif}.ds-btn-secondary{background:#eceef2;color:#16181d}"
+    },
+    {
+      "name": "Peer Row",
+      "kind": "custom",
+      "refersTo": "peer-row",
+      "description": "Hostname in body; addresses and numbers in tabular mono; P2P / Relay chip.",
+      "html": "<div class=\"ds-peers\"><div class=\"ds-row\"><span class=\"ds-host\">nas</span><span class=\"ds-chip ds-chip-on\">P2P</span><span class=\"ds-m\">10.144.144.3</span><span class=\"ds-m ds-r\">12 ms</span><span class=\"ds-m ds-r\">0.0%</span></div><div class=\"ds-row\"><span class=\"ds-host\">office-pc</span><span class=\"ds-chip ds-chip-relay\">Relay</span><span class=\"ds-m\">10.144.144.7</span><span class=\"ds-m ds-r ds-warn\">186 ms</span><span class=\"ds-m ds-r\">1.2%</span></div></div>",
+      "css": ".ds-peers{width:520px;background:#fff;border:1px solid #dfe2e8;border-radius:8px;overflow:hidden;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;color:#16181d}.ds-row{display:grid;grid-template-columns:1fr 64px 120px 64px 56px;align-items:center;gap:12px;min-height:44px;padding:8px 12px;font-size:14px;line-height:20px}.ds-row+.ds-row{border-top:1px solid #dfe2e8}.ds-row:hover{background:#e4e7ec}.ds-m{font-family:ui-monospace,'SF Mono','Cascadia Mono',Consolas,'Roboto Mono',monospace;font-variant-numeric:tabular-nums;font-size:13px}.ds-r{text-align:right}.ds-warn{color:#9a5b06}.ds-chip{display:inline-flex;align-items:center;justify-content:center;height:20px;padding:0 8px;border-radius:9999px;font-size:12px;font-weight:500;line-height:16px}.ds-chip-on{background:rgba(20,111,70,.1)}.ds-chip-relay{background:rgba(154,91,6,.1)}"
+    },
+    {
+      "name": "Secret Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Masked by default with Show, Copy and Generate; label above, helper below; 3:1 input edge.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-label\">Network secret</span><span class=\"ds-input-wrap\"><input class=\"ds-input\" type=\"password\" value=\"example-secret-do-not-use\" /><button class=\"ds-ib\">Show</button><button class=\"ds-ib\">Generate</button></span><span class=\"ds-help\">Share it only with people who should join this network.</span></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:4px;width:360px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif}.ds-label{font-size:12px;font-weight:500;line-height:16px;color:#5b616e}.ds-input-wrap{display:flex;align-items:center;gap:4px;height:32px;padding:0 4px 0 10px;border:1px solid #878d99;border-radius:6px;background:#fff}.ds-input-wrap:focus-within{border-color:#3156d3;outline:2px solid #3156d3;outline-offset:2px}.ds-input{flex:1;border:0;outline:0;background:transparent;font-family:ui-monospace,'SF Mono','Cascadia Mono',Consolas,'Roboto Mono',monospace;font-variant-numeric:tabular-nums;font-size:13px;color:#16181d}.ds-ib{height:24px;padding:2px 8px;border:0;border-radius:6px;background:transparent;color:#16181d;font:500 12px/16px system-ui,sans-serif}.ds-ib:hover{background:#e4e7ec}.ds-help{font-size:12px;line-height:16px;color:#5b616e}"
+    },
+    {
+      "name": "Exposure Callout",
+      "kind": "custom",
+      "refersTo": "callout",
+      "description": "10% amber tint, hue icon, foreground text: explains a setting that widens exposure.",
+      "html": "<div class=\"ds-callout\" role=\"note\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 9v4M12 17h.01\"/><path d=\"M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z\"/></svg><span>This node will act as an exit node: other peers can send their internet traffic through it.</span></div>",
+      "css": ".ds-callout{display:flex;gap:8px;align-items:flex-start;width:420px;padding:12px 16px;border-radius:8px;background:rgba(154,91,6,.1);color:#16181d;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;font-size:14px;line-height:20px}.ds-callout svg{flex:none;margin-top:2px;color:#9a5b06}"
+    },
+    {
+      "name": "Target Switcher",
+      "kind": "nav",
+      "refersTo": "target-switcher",
+      "description": "Top of the shell: current target, its kind chip and lamp; opens the list of targets.",
+      "html": "<div class=\"ds-side\"><button class=\"ds-ts\"><span class=\"ds-lamp ds-on\"></span><span class=\"ds-ts-name\">home-server</span><span class=\"ds-chip\">Server</span><svg class=\"ds-caret\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></button><div class=\"ds-sec\">Console</div><a class=\"ds-item ds-active\"><span class=\"ds-mark\"></span>Machines</a><a class=\"ds-item\"><span class=\"ds-mark\"></span>Networks</a><a class=\"ds-item\"><span class=\"ds-mark\"></span>Credentials</a></div>",
+      "css": ".ds-side{width:240px;padding:8px;background:#eef0f3;border-right:1px solid #dfe2e8;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;color:#16181d;display:flex;flex-direction:column;gap:2px}.ds-ts{display:flex;align-items:center;gap:8px;height:36px;padding:6px 10px;border:0;border-radius:6px;background:transparent;color:#16181d;font:600 16px/24px system-ui,sans-serif;text-align:left}.ds-ts:hover{background:#e4e7ec}.ds-ts-name{flex:1}.ds-caret{flex:none;color:#5b616e}.ds-lamp{width:8px;height:8px;border-radius:9999px}.ds-on{background:#146f46}.ds-chip{height:20px;padding:0 8px;border-radius:9999px;background:#eceef2;color:#5b616e;font:500 12px/20px system-ui,sans-serif}.ds-sec{margin:12px 10px 4px;font-size:12px;font-weight:500;line-height:16px;color:#5b616e}.ds-item{position:relative;display:flex;align-items:center;height:32px;padding:6px 10px;border-radius:6px;font-size:14px;line-height:20px;color:#16181d;text-decoration:none}.ds-item:hover,.ds-active{background:#e4e7ec}.ds-mark{position:absolute;left:0;top:8px;width:2px;height:16px;border-radius:2px}.ds-active .ds-mark{background:#3156d3}"
+    },
+    {
+      "name": "Capability Notice",
+      "kind": "custom",
+      "refersTo": "capability-notice",
+      "description": "What this device cannot do locally, why, and the remote alternative as a button.",
+      "html": "<div class=\"ds-cap\" role=\"note\"><span>This browser can't join a network. It manages this server's node instead.</span><button class=\"ds-btn\">Manage this server's node</button></div>",
+      "css": ".ds-cap{display:flex;flex-direction:column;align-items:flex-start;gap:12px;width:420px;padding:12px 16px;border-radius:8px;background:rgba(49,86,211,.1);color:#16181d;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;font-size:14px;line-height:20px}.ds-btn{height:32px;padding:6px 12px;border:0;border-radius:6px;background:#3156d3;color:#fff;font:500 14px/20px system-ui,sans-serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Switchboard",
+    "overview": "EasyTierUI is a switchboard for a private mesh: each network is a board, each peer a line with a lamp. At rest the board is quiet — neutral layers, hairlines, readable text — so when a lamp changes (a peer falls back to a relay, the core stops, a node joins) it is the only thing that moves. Color means state, or the one action that matters on the screen; it is never decoration. This is SigNoz's night-shift discipline carried to a native, cross-platform client that also runs on phones.\n\nTwo scenes share one system on every platform: someone joining their own devices wants a yes or no at a glance (comfortable density, touch-sized targets); an operator manages dozens of nodes or stands up a control plane from a desktop, a phone or the server's web dashboard (medium density, compact only in admin tables). The same pages appear whichever role or target is selected.\n\nThe app follows the system appearance; light and dark are equal themes on one layer model. Platform chrome stays the platform's; the brand lives in the cobalt accent, the status lamps and the precision of the machine-data typography.",
+    "keyCharacteristics": [
+      "Three neutral layers (floor, panel, well) with 1 pt hairlines, identical in structure in light and dark.",
+      "One chrome accent (Cobalt); green, amber and red only for link state and errors, always with words.",
+      "System UI font for people, system monospace with tabular figures for machine data.",
+      "Two radii: 6 pt for controls, 8 pt for containers; pills only for chips, switches and lamps.",
+      "Flat at rest; one shadow recipe for popups; no glass.",
+      "Quick, quiet motion (150 ms state, 200 ms overlay) that stops under Reduce Motion."
+    ],
+    "rules": [
+      {
+        "name": "The One Signal Rule",
+        "body": "Cobalt is the only accent the chrome uses: the primary action, focus, selection, checked state and links. Cobalt anywhere else is a bug.",
+        "section": "colors"
+      },
+      {
+        "name": "The Red Is Reserved Rule",
+        "body": "Fault Red means failure or destruction. No chart series, badge or illustration is red; amber is not a softer red for \"important\".",
+        "section": "colors"
+      },
+      {
+        "name": "The Lamp Needs Words Rule",
+        "body": "A state is never color alone: every lamp sits next to a label or an icon with an accessible name.",
+        "section": "colors"
+      },
+      {
+        "name": "The Token, Not Hex Rule",
+        "body": "Colors come from theme.json through theme(); a missing role is added to theme.json (light and dark) and DESIGN.md in the same change.",
+        "section": "colors"
+      },
+      {
+        "name": "The Machine Voice Rule",
+        "body": "What the core or the network produced is set in the monospace with tabular figures; what a person wrote for a person is in the UI font. Never mix the two in one text run.",
+        "section": "typography"
+      },
+      {
+        "name": "The Quiet Section Rule",
+        "body": "Sections are introduced by a sentence-case Label in muted-foreground: no uppercase, no letter spacing, no eyebrow above a heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Resting State Rule",
+        "body": "A surface that stays on screen never casts a shadow; it separates by one layer step and a hairline.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Solid Overlay Rule",
+        "body": "Floating layers are solid popover fills with a hairline. No translucency or blur as decoration.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Two-Tier Radius Rule",
+        "body": "Controls are 6 pt and containers 8 pt; anything else that is not a pill is a mistake.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** take every color from `theme()` / token classes, and add missing roles to `theme.json` in light and dark.",
+      "**Do** build on the floor / panel / well layers with 1 pt hairlines.",
+      "**Do** set machine data in the monospace with tabular figures, and people's text in the system UI font.",
+      "**Do** pair every lamp and status color with a word or a named icon.",
+      "**Do** use 6 pt radii for controls and 8 pt for containers, and the 4-point spacing steps.",
+      "**Do** keep touch targets at least 44 × 44 pt and let frames grow with text.",
+      "**Do** keep state transitions at 150 ms and overlays at 200 ms, and honor `reduce_motion()`.",
+      "**Do** keep iOS and Android headers, back gestures and alerts native."
+    ],
+    "donts": [
+      "**Don't** write hex, `rgb()`, `hsl()` or Tailwind palette colors in UI code.",
+      "**Don't** use Cobalt for decoration, or a second accent in the chrome.",
+      "**Don't** use red for anything but failure and destruction, or amber as \"important\".",
+      "**Don't** put shadows on cards, lists, the sidebar or headers, or use glass and blur.",
+      "**Don't** use uppercase or letter-spaced labels, or an eyebrow above a heading.",
+      "**Don't** use a radius other than 6 pt, 8 pt or a pill.",
+      "**Don't** fix the height of anything that holds text.",
+      "**Don't** show a peer or network as connected before the core reports it."
+    ]
+  }
+}
