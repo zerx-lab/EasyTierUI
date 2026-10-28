@@ -1,0 +1,11 @@
+# Project omp settings for EasyTierUI (committed: every agent session in this
+# repository gets the same rules, hooks and LSP behavior).
+ttsr:
+  # Safety rules (.omp/rules/) re-fire after a short gap instead of once per session.
+  repeatMode: after-gap
+  repeatGap: 3
+lsp:
+  diagnosticsOnWrite: true
+  diagnosticsOnEdit: true
+  # rust-analyzer formats with nightly rustfmt (.omp/lsp.json), matching `cargo +nightly fmt`.
+  formatOnWrite: true

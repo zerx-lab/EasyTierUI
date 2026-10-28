@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "rust-analyzer": {
+      "settings": {
+        "rust-analyzer": {
+          "rustfmt": {
+            "overrideCommand": ["rustup", "run", "nightly", "rustfmt", "--edition", "2024", "--emit", "stdout"]
+          }
+        }
+      }
+    }
+  }
+}
