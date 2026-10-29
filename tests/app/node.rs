@@ -734,9 +734,6 @@ fn the_peers_page_lists_searches_filters_and_opens_a_peer() {
     assert!(!app.shows("10.126.126.2/24"));
     assert!(app.shows("Direct (P2P)"));
     assert!(app.shows("Relayed, 2 hops"));
-    // Before two rates exist the charts say they are collecting; no line is drawn from nothing.
-    assert!(app.screen().matches("id:peers-throughput-empty").unwrap());
-
     // Search by hostname, then by address.
     app.type_text("id:peers-search", "brav").unwrap();
     app.wait_for_gone("id:peer-11", Duration::from_secs(2))
@@ -776,19 +773,26 @@ fn the_peers_page_lists_searches_filters_and_opens_a_peer() {
 }
 
 #[test]
-fn the_charts_draw_once_the_core_has_answered_enough_times() {
+fn the_charts_draw_and_each_peer_shows_its_rate_once_the_core_has_answered() {
     let mut app = answering_core(Device::desktop(Os::MacOs, 1200.0))
         .start()
         .unwrap();
     run_network(&mut app, true);
     app.press("id:page-peers").unwrap();
-    app.wait_for("id:peers-throughput-empty").unwrap();
-    // Three reads make two rates: the chart's empty state gives way to its plot.
+    // Three reads make two rates: the charts draw (the empty state before them is the components' test).
     app.wait_for_gone("id:peers-throughput-empty", Duration::from_secs(15))
         .unwrap();
     app.wait_for_gone("id:peers-latency-empty", Duration::from_secs(5))
         .unwrap();
     assert!(app.screen().matches("text:/B\\/s/").unwrap());
+
+    // A peer's own rate, not its byte count: the answering core moves 40 kB a read from every peer.
+    app.wait_for("id:peer-11 >> text:/KiB\\/s/").unwrap();
+    app.press("label:Peer alpha").unwrap();
+    app.wait_for("id:peer-rx-rate").unwrap();
+    app.press("label:Close peer").unwrap();
+    app.wait_for_gone("id:peer-drawer", Duration::from_secs(2))
+        .unwrap();
 }
 
 #[test]

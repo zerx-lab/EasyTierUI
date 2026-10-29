@@ -6,6 +6,8 @@
 pub mod keychain;
 pub mod net;
 pub mod node;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod pairs;
 pub mod platform;
 pub mod role;
 pub mod secret;

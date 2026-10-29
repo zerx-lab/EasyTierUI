@@ -11,10 +11,14 @@ pub struct PeersStrings {
     pub col_latency: &'static str,
     /// Column: packet loss.
     pub col_loss: &'static str,
-    /// Column: bytes received.
+    /// Column: the rate received from the peer now.
     pub col_rx: &'static str,
-    /// Column: bytes sent.
+    /// Column: the rate sent to the peer now.
     pub col_tx: &'static str,
+    /// Drawer: bytes received from the peer since its link came up.
+    pub label_rx_total: &'static str,
+    /// Drawer: bytes sent to the peer since its link came up.
+    pub label_tx_total: &'static str,
     /// Column: route.
     pub col_route: &'static str,
     /// Column: the tunnel protocol.
@@ -127,6 +131,8 @@ pub(super) static EN: PeersStrings = PeersStrings {
     col_loss: "Loss",
     col_rx: "Received",
     col_tx: "Sent",
+    label_rx_total: "Received in total",
+    label_tx_total: "Sent in total",
     col_route: "Route",
     col_tunnel: "Tunnel",
     col_nat: "NAT type",
@@ -188,6 +194,8 @@ pub(super) static ZH_CN: PeersStrings = PeersStrings {
     col_loss: "丢包",
     col_rx: "接收",
     col_tx: "发送",
+    label_rx_total: "累计接收",
+    label_tx_total: "累计发送",
     col_route: "路由",
     col_tunnel: "隧道",
     col_nat: "NAT 类型",

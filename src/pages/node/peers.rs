@@ -7,7 +7,7 @@ use nsh_core::prelude::*;
 use super::{
     common::{lamp_of, nat_word, responsive, status_word, tag},
     failure,
-    format::{LOSS_BAD, LOSSY, SLOW_LATENCY_MS, address_text, bytes_text, latency_text, loss_text},
+    format::{LOSS_BAD, LOSSY, SLOW_LATENCY_MS, address_text, latency_text, loss_text, rate_text},
     panels::{self, Scope},
 };
 use crate::{
@@ -397,14 +397,14 @@ fn table(store: Store) -> View {
             .hint(loss_hint),
         responsive(
             column(store.tr(|s| s.node.peers.col_rx))
-                .width(84.0)
+                .width(96.0)
                 .mono()
                 .right(),
             1150.0,
         ),
         responsive(
             column(store.tr(|s| s.node.peers.col_tx))
-                .width(84.0)
+                .width(96.0)
                 .mono()
                 .right(),
             1150.0,
@@ -500,9 +500,9 @@ pub(super) fn route_word(store: Store, route: RouteKind) -> String {
     }
 }
 
-/// A byte count, or nothing (a dash in the cell) when the core did not count.
-fn counted(bytes: Option<u64>) -> String {
-    bytes.map_or_else(String::new, |bytes| bytes_text(Some(bytes)))
+/// A rate, or nothing (a dash in the cell) before the peer's counter was read twice.
+fn rate_cell_text(rate: Option<f64>) -> String {
+    rate.map_or_else(String::new, rate_text)
 }
 
 /// One peer's row. `item` follows the core's readings while the row stays.
@@ -510,6 +510,10 @@ fn row(store: Store, cols: &Columns, item: ReadSignal<PeerRow>) -> crate::compon
     let node = store.node();
     let reference = item.with_untracked(PeerRow::reference);
     let of = move |f: fn(&PeerRow) -> String| move || item.with(f);
+    let rates = {
+        let reference = reference.clone();
+        computed(move || node.latest_peer_rates(&reference.network, reference.peer_id))
+    };
     let latency = move || item.with(|row| row.peer.latency_ms);
     let loss = move || item.with(|row| row.peer.loss);
     let route = move || item.with(|row| row.peer.route);
@@ -534,8 +538,8 @@ fn row(store: Store, cols: &Columns, item: ReadSignal<PeerRow>) -> crate::compon
             LATENCY_BAR,
         ))
         .cell(threshold_bar(loss, move || loss_text(loss()), LOSS_BAR))
-        .text(of(|row| counted(row.peer.rx_bytes)))
-        .text(of(|row| counted(row.peer.tx_bytes)))
+        .text(move || rate_cell_text(rates.get().rx_bps))
+        .text(move || rate_cell_text(rates.get().tx_bps))
         .text(of(|row| row.peer.tunnel.clone().unwrap_or_default()))
         .text(move || {
             let nat = item.with(|row| row.peer.nat_type);

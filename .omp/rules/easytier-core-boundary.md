@@ -56,7 +56,7 @@ On a Linux server the product is headless processes plus EasyTierUI's web build 
 
 1. **The TOML config file** (documented at <https://easytier.cn/en/guide/network/config-file.html>): rendered with a TOML serializer from typed structs, never by string formatting.
 2. **Process flags**: `easytier-core` `-c <file>`, `--check-config`, `--rpc-portal 127.0.0.1:<port>`, `--rpc-portal-whitelist 127.0.0.1/32,::1/128`, `--disable-env-parsing`, `--no-tun`, `--config-server`, `--machine-id`, `--file-log-*`; `easytier-web` `--db`, `--config-server-port`, `--config-server-protocol`, `--api-server-addr`, `--api-server-port`, `--no-web`, `--disable-registration`, `--file-log-*`. Pass only what the detected version supports.
-3. **`easytier-cli -p 127.0.0.1:<port> -o json <command>`** from the same release directory as the running core: versions always match.
+3. **`easytier-cli -p 127.0.0.1:<port> -o json <command>`** from the same release directory as the running core: versions always match. The peer list is read with `-v` (`-o json -v peer`): the raw peer-route pairs, byte counters to the byte and latency in microseconds, mapped by `src/core/pairs.rs` (the same mapper the embedded running info uses); plain `-o json peer` rounds bytes to three significant digits, which turns a one-second rate into zeros and spikes.
 4. **easytier-web's REST API**, versioned by the server's reported version; its login sends the password as the official frontend does (lower-case hex MD5 of the password, `frontend/src/modules/api.ts`), so it is only ever sent over HTTPS or loopback.
 5. **The RPC portal directly** only if (3) proves too slow, behind the same adapter.
 

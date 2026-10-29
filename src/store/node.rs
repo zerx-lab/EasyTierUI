@@ -33,10 +33,15 @@ use nsh_core::prelude::*;
 use self::views::Runtime;
 pub use self::{
     browse::{NetworkFilter, PeerMix, PeerRef, PeerRow, PeerStats, RouteFilter},
-    charts::{LATENCY_LINES, LatencyLine, ThroughputSeries, align},
+    charts::{
+        Aligned, LATENCY_LINES, LatencyLine, LatencyLines, ThroughputSeries, TimedSamples, align,
+    },
     editor::{DetailTab, EditorDraft, IpChoice},
     flow::{FlowDraft, FlowKind, FlowStep, parse_peer, parse_peer_at},
-    history::{HISTORY_CAPACITY, MAX_GAP_MS, PeerCountsPoint, PeerSeries, RatePoint, Totals},
+    history::{
+        HISTORY_CAPACITY, HISTORY_SPAN_MS, MAX_GAP_MS, PeerCountsPoint, PeerRates, PeerSeries,
+        RatePoint, SLOT_MS, Totals,
+    },
     import::{ImportDraft, ImportStage, ManagedDraft, parse_import},
     problem::{Field, FieldProblem, ImportFailure, ImportReason, ProblemKind, SaveFailure},
     views::{CoreStatus, ExportFailure, ExportView, Failure, LogView, Notice, Op, Status},
@@ -52,11 +57,12 @@ use crate::{
     profile::{NetworkProfile, NshStorage, ProfileId, RepoError, repo},
 };
 
-/// How often the instances that are up (or failed) are read.
-const POLL_EVERY: Duration = Duration::from_secs(2);
+/// How often the instances that are up (or failed) are read: every second, so rates and peers follow the traffic
+/// (a read is two `easytier-cli` runs of about 25 ms on the desktops, an in-process call on mobile).
+const POLL_EVERY: Duration = Duration::from_secs(1);
 /// The core is looked for again every this many polls while it is ready (a release may be switched in Settings);
 /// while it is missing or too old it is looked for at every poll.
-const CORE_CHECK_EVERY: u32 = 5;
+const CORE_CHECK_EVERY: u32 = 10;
 
 /// See the module docs. A `Copy` handle of signals, like [`Store`].
 #[derive(Clone, Copy)]

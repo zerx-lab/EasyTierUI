@@ -239,15 +239,39 @@ pub fn check_service_paths(install: &ServiceInstall<'_>, strict: bool) -> Result
     }
 }
 
-/// `-p 127.0.0.1:<port> -o json <subcommand>`: a read of the running node through the CLI.
-pub fn cli_read(port: u16, subcommand: &str) -> Vec<OsString> {
-    vec![
+/// What the sidecar reads through `easytier-cli`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CliRead {
+    /// `node`: this node.
+    Node,
+    /// `-v peer`: the raw peer-route pairs. Without `-v` the CLI rounds byte counters to three significant digits
+    /// (`"1.47 kB"`), which turns a rate over a two-second step into zeros and spikes.
+    Peers,
+}
+
+impl CliRead {
+    /// Its name in logs.
+    pub fn name(self) -> &'static str {
+        match self {
+            CliRead::Node => "node",
+            CliRead::Peers => "peer",
+        }
+    }
+}
+
+/// `-p 127.0.0.1:<port> -o json [-v] <subcommand>`: a read of the running node through the CLI.
+pub fn cli_read(port: u16, read: CliRead) -> Vec<OsString> {
+    let mut args = vec![
         os("-p"),
         OsString::from(rpc_portal(port)),
         os("-o"),
         os("json"),
-        os(subcommand),
-    ]
+    ];
+    if read == CliRead::Peers {
+        args.push(os("-v"));
+    }
+    args.push(os(read.name()));
+    args
 }
 
 #[cfg(test)]
@@ -432,8 +456,12 @@ mod tests {
             ["service", "--name", "easytierui-p-a1", "stop"]
         );
         assert_eq!(
-            text(&cli_read(41500, "peer")),
-            ["-p", "127.0.0.1:41500", "-o", "json", "peer"]
+            text(&cli_read(41500, CliRead::Peers)),
+            ["-p", "127.0.0.1:41500", "-o", "json", "-v", "peer"]
+        );
+        assert_eq!(
+            text(&cli_read(41500, CliRead::Node)),
+            ["-p", "127.0.0.1:41500", "-o", "json", "node"]
         );
         assert_eq!(service_name("p-a1"), "easytierui-p-a1");
     }

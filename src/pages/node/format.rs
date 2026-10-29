@@ -67,6 +67,11 @@ pub(super) fn address_text(address: Option<Ipv4Net>) -> String {
     address.map_or_else(String::new, |net| net.addr().to_string())
 }
 
+/// A rate in bytes per second with its unit: `120 B/s`, `1.5 MiB/s`.
+pub(super) fn rate_text(bytes_per_second: f64) -> String {
+    ChartUnit::BytesPerSecond.format(bytes_per_second)
+}
+
 /// A rate in bytes per second as its number and its unit (`1.5`, `MiB/s`), for a summary cell.
 pub(super) fn rate_parts(bytes_per_second: f64) -> (String, String) {
     let text = ChartUnit::BytesPerSecond.format(bytes_per_second);

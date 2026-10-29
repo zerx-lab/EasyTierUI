@@ -11,7 +11,11 @@ use nsh_app_easytierui::components::{
     ChartUnit, Lamp, SeriesColor, chart_series, column, columns, data_table, drawer, metric_chart,
     neutral_chip, summary_cell, summary_strip, table_row,
 };
-use nsh_core::{MountItem, prelude::*};
+use nsh_core::{
+    MountItem, NodeId,
+    canvas::{CanvasOp, PathOp},
+    prelude::*,
+};
 use nsh_engine::{EngineConfig, Idiom, Os, Points, Root, Size};
 use nsh_testing::Headless;
 
@@ -85,6 +89,11 @@ fn Probe() -> impl IntoElement {
         .child(
             metric_chart(
                 "Throughput",
+                move || {
+                    (0..samples.get().len())
+                        .map(|i| 1_000.0 * f64::from(u32::try_from(i).unwrap_or(0)))
+                        .collect()
+                },
                 vec![
                     chart_series("Received", SeriesColor::Received, move || samples.get()).filled(),
                 ],
@@ -198,8 +207,25 @@ fn the_drawer_opens_with_its_parts_and_closes_with_its_close_button() {
 }
 
 #[test]
-fn the_chart_says_it_is_collecting_until_it_has_samples() {
+fn the_chart_says_it_is_collecting_until_it_has_samples_then_draws_them() {
     let (mut app, _) = start();
+    // The most line segments any canvas has recorded in its latest drawing.
+    let segments: Arc<Mutex<HashMap<NodeId, usize>>> = Arc::default();
+    let seen = segments.clone();
+    app.observe(move |_, batch| {
+        for item in &batch.items {
+            if let MountItem::Canvas { id, drawing } = item {
+                let lines = drawing
+                    .ops
+                    .iter()
+                    .filter(|op| matches!(op, CanvasOp::Path(PathOp::LineTo(..))))
+                    .count();
+                seen.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(*id, lines);
+            }
+        }
+    });
     app.wait_for("Collecting samples\u{2026}").unwrap();
     app.wait_for("id:chart-empty").unwrap();
 
@@ -209,4 +235,14 @@ fn the_chart_says_it_is_collecting_until_it_has_samples() {
     // Samples 1..3 peak at 3.3, so the axis tops out at 5 and its middle reads 2.5.
     app.wait_for("2.5").unwrap();
     assert!(app.shows("Received"));
+    // The plot draws: three grid lines, the series' two segments and its area's four edges. A plot whose marks lost
+    // their plot records the grid at most, and an empty chart looks like one still waiting.
+    let most = segments
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .values()
+        .copied()
+        .max()
+        .unwrap_or(0);
+    assert!(most >= 9, "the chart recorded {most} line segments");
 }

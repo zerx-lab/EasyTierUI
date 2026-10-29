@@ -110,7 +110,7 @@ cargo check --target aarch64-linux-android --lib                     # Android: 
 CC_x86_64_pc_windows_gnu=<zig cc -target x86_64-windows-gnu wrapper> cargo check --target x86_64-pc-windows-gnu --lib
 omp ttsr scan                               # which .omp/rules match the tree (after changing rules)
 easytier-core --check-config -c <file>      # validate a rendered config (2.6.4 is silent on failure: exit status only)
-easytier-cli -p 127.0.0.1:<port> -o json node   # what the sidecar backend reads (peer, route, connector, stats, ...)
+easytier-cli -p 127.0.0.1:<port> -o json node   # what the sidecar backend reads (node; peers with -v: exact counters)
 easytier-web --db <tmp>/et.db --api-server-addr 127.0.0.1   # a throwaway local control plane (seeds admin/admin, user/user)
 ```
 

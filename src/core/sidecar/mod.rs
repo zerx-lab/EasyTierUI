@@ -804,12 +804,10 @@ enum ReadError {
     Unexpected(#[from] parse::ParseError),
 }
 
-/// One `easytier-cli -p 127.0.0.1:<port> -o json <subcommand>` read; its stdout is returned, never logged.
-fn cli_json(cli: &Path, port: u16, subcommand: &str) -> Result<String, ReadError> {
-    match run::run(
-        run::command(cli, argv::cli_read(port, subcommand)),
-        CLI_TIMEOUT,
-    ) {
+/// One `easytier-cli -p 127.0.0.1:<port> -o json …` read; its stdout is returned, never logged.
+fn cli_json(cli: &Path, port: u16, read: argv::CliRead) -> Result<String, ReadError> {
+    let subcommand = read.name();
+    match run::run(run::command(cli, argv::cli_read(port, read)), CLI_TIMEOUT) {
         Ok(captured) if captured.success() => Ok(captured.stdout),
         Ok(captured) => {
             log::debug!(
@@ -825,6 +823,15 @@ fn cli_json(cli: &Path, port: u16, subcommand: &str) -> Result<String, ReadError
     }
 }
 
+/// The peer list and when its counters were read: the middle of the CLI's run, which a rate over two readings
+/// divides by (stamping the end instead would let the spawn time, tens of milliseconds and uneven, skew it).
+fn read_peers(cli: &Path, port: u16) -> Result<(String, f64), ReadError> {
+    let before = unix_ms();
+    let json = cli_json(cli, port, argv::CliRead::Peers)?;
+    let after = unix_ms();
+    Ok((json, before + (after - before) / 2.0))
+}
+
 /// The node and its peers, read with two CLI processes at once.
 fn read_snapshot(cli: &Path, port: u16) -> Result<NodeSnapshot, ReadError> {
     if port == 0 {
@@ -833,15 +840,16 @@ fn read_snapshot(cli: &Path, port: u16) -> Result<NodeSnapshot, ReadError> {
     let (node, peers) = thread::scope(|scope| {
         let peers = thread::Builder::new()
             .name("etui-cli-peer".to_owned())
-            .spawn_scoped(scope, || cli_json(cli, port, "peer"));
-        let node = cli_json(cli, port, "node");
+            .spawn_scoped(scope, || read_peers(cli, port));
+        let node = cli_json(cli, port, argv::CliRead::Node);
         let peers = match peers {
             Ok(handle) => handle.join().unwrap_or(Err(ReadError::Unreachable)),
-            Err(_) => cli_json(cli, port, "peer"),
+            Err(_) => read_peers(cli, port),
         };
         (node, peers)
     });
-    Ok(parse::snapshot(&node?, &peers?, unix_ms())?)
+    let (peers, read_at_ms) = peers?;
+    Ok(parse::snapshot(&node?, &peers, read_at_ms)?)
 }
 
 #[cfg(test)]
@@ -959,16 +967,17 @@ mod tests {
         use super::*;
 
         /// A release whose `easytier-core` is a shell script that prints its arguments and environment shape, then
-        /// idles, and whose `easytier-cli` prints the fixtures.
+        /// idles, and whose `easytier-cli` prints the fixtures (the peer list only when asked with `-v`, as the
+        /// sidecar must ask for it).
         fn fake_release(dir: &Path) -> Programs {
             let programs = programs_at(dir, "2.6.4");
             let core = format!(
                 "#!/bin/sh\nfor a in \"$@\"; do echo \"arg:$a\"; done\necho \"env-config-server:[$ET_CONFIG_SERVER]\"\necho 'network_secret = \"{SECRET}\"'\nif [ \"$1\" = \"--check-config\" ]; then echo 'bad config near network_secret = \"{SECRET}\"' >&2; exit 1; fi\nsleep 60\n"
             );
             let cli = format!(
-                "#!/bin/sh\ncase \"$*\" in\n*service*) echo 'Service is stopped'; exit 0;;\n*node) cat <<'EOF'\n{}\nEOF\n;;\n*peer) cat <<'EOF'\n{}\nEOF\n;;\nesac\n",
+                "#!/bin/sh\ncase \"$*\" in\n*service*) echo 'Service is stopped'; exit 0;;\n*node) cat <<'EOF'\n{}\nEOF\n;;\n*-v\\ peer) cat <<'EOF'\n{}\nEOF\n;;\nesac\n",
                 include_str!("../../../tests/fixtures/easytier-2.6.4/cli-node.json"),
-                include_str!("../../../tests/fixtures/easytier-2.6.4/cli-peer.json"),
+                include_str!("../../../tests/fixtures/easytier-2.6.4/cli-peer-verbose.json"),
             );
             for (path, body) in [(&programs.core, core), (&programs.cli, cli)] {
                 fs::write(path, body).unwrap();

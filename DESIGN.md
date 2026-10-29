@@ -610,12 +610,16 @@ never shows a near-empty second row. Machine data is Mono, one line, selectable,
 missing value is a muted dash.
 
 ### Charts
-`metric_chart` and `sparkline` draw in-memory samples (about three minutes) with NSH's plot: area and line series, a
-hairline grid (`border` at low opacity) at the top, middle and bottom of the y axis, a y axis of Mono labels in Meta
-size and `muted-foreground`, formatted with the unit (B/s, KiB/s, MiB/s, GiB/s; ms, s; %), and no legend box: a row of
-8 pt swatches and words above the plot. Received is `chart-1`, sent `chart-2`, further series `chart-3` ... `chart-5`;
-a peer's color is hashed from its id over that red-free palette, so it is the same in every chart. Before two samples
-the chart says it is collecting them. A sparkline is 64 x 20 pt, a line only, and sits in a table cell.
+`metric_chart` and `sparkline` draw in-memory samples (three minutes, read every second) on a canvas the app records:
+area and line series, a hairline grid (`border` at low opacity) at the top, middle and bottom of the y axis, a y axis of
+Mono labels in Meta size and `muted-foreground`, formatted with the unit (B/s, KiB/s, MiB/s, GiB/s; ms, s; %), and no
+legend box: a row of 8 pt swatches and words above the plot. A byte axis tops out at a round number of the binary unit
+it shows (2 KiB/s, not 2000 B/s). The x axis is time: each sample sits at the moment it was read, the axis ends at the
+newest one and reaches back three minutes, so a fresh network fills it from the right and a missing reading is a
+break in the line. Received is `chart-1`, sent `chart-2`, further series `chart-3` ... `chart-5`; a peer's color is
+hashed from its id over that red-free palette, so it is the same in every chart. Before two samples the chart says it
+is collecting them. A sparkline is 64 x 20 pt, a line only (evenly spaced), and sits in a table cell. The Peers table
+shows each peer's rate now, received and sent; its byte totals since the link came up are in the peer's drawer.
 
 **The Real Samples Rule.** A chart or sparkline shows only samples the core reported. No samples, no line: the empty
 state says so. Never a decorative trend, a smoothed guess or a placeholder curve.

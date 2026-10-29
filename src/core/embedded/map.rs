@@ -1,16 +1,17 @@
 //! The adapter from EasyTier's `NetworkInstanceRunningInfo` JSON (what the bridge crate returns; the schema
-//! easytier-web's `networks/info` serves too) to the app's [`NodeSnapshot`].
+//! easytier-web's `networks/info` serves too) to the app's [`NodeSnapshot`]; its peers go through
+//! [`crate::core::pairs`].
 //!
 //! Pure functions over text: no EasyTier crate, so it compiles and is tested on every platform. Parsing is
 //! tolerant (`#[serde(default)]`, unknown fields ignored); a renamed upstream field is fixed here only.
 
-use std::net::Ipv4Addr;
-
 use ipnet::Ipv4Net;
 use serde::Deserialize;
-use uuid::Uuid;
 
-use crate::core::state::{NatType, NodeInfo, NodeSnapshot, PeerSummary, RouteKind};
+use crate::core::{
+    pairs::{self, InetDoc, PairDoc, StunDoc, inet, nat},
+    state::{NodeInfo, NodeSnapshot},
+};
 
 /// Why a running-info document did not become a snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -43,192 +44,8 @@ struct NodeDoc {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
-struct InetDoc {
-    address: Option<Ipv4Doc>,
-    network_length: u32,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct Ipv4Doc {
-    /// Host-order integer (`177246465` is `10.144.145.1`).
-    addr: u32,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct StunDoc {
-    udp_nat_type: i64,
-    public_ip: Vec<String>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
 struct UrlDoc {
     url: String,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct PairDoc {
-    route: Option<RouteDoc>,
-    peer: Option<PeerDoc>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct RouteDoc {
-    peer_id: u32,
-    ipv4_addr: Option<InetDoc>,
-    cost: i32,
-    path_latency: i32,
-    path_latency_latency_first: Option<i32>,
-    hostname: String,
-    stun_info: Option<StunDoc>,
-    version: String,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct PeerDoc {
-    conns: Vec<ConnDoc>,
-    default_conn_id: Option<UuidDoc>,
-}
-
-/// A protobuf UUID: four big-endian `u32` quarters.
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct UuidDoc {
-    part1: u32,
-    part2: u32,
-    part3: u32,
-    part4: u32,
-}
-
-impl UuidDoc {
-    fn to_uuid(&self) -> Uuid {
-        let wide = |hi: u32, lo: u32| (u64::from(hi) << 32) | u64::from(lo);
-        let value = (u128::from(wide(self.part1, self.part2)) << 64)
-            | u128::from(wide(self.part3, self.part4));
-        Uuid::from_u128(value)
-    }
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct ConnDoc {
-    conn_id: String,
-    tunnel: Option<TunnelDoc>,
-    stats: Option<StatsDoc>,
-    loss_rate: f32,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct TunnelDoc {
-    tunnel_type: String,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct StatsDoc {
-    rx_bytes: u64,
-    tx_bytes: u64,
-    latency_us: u64,
-}
-
-/// An address with its prefix; `None` for the all-zero address (no IP assigned) or an impossible prefix.
-fn inet(doc: &InetDoc) -> Option<Ipv4Net> {
-    let addr = doc.address.as_ref()?.addr;
-    if addr == 0 {
-        return None;
-    }
-    let prefix = u8::try_from(doc.network_length).ok()?;
-    Ipv4Net::new(Ipv4Addr::from(addr), prefix).ok()
-}
-
-fn nat(stun: Option<&StunDoc>) -> NatType {
-    stun.map_or(NatType::Unknown, |stun| {
-        NatType::from_code(stun.udp_nat_type)
-    })
-}
-
-/// The connection the core prefers to a peer, else the first.
-fn default_conn(peer: &PeerDoc) -> Option<&ConnDoc> {
-    let default = peer.default_conn_id.as_ref().map(UuidDoc::to_uuid);
-    peer.conns
-        .iter()
-        .find(|conn| default.is_some_and(|id| Uuid::parse_str(&conn.conn_id) == Ok(id)))
-        .or_else(|| peer.conns.first())
-}
-
-/// Round-trip time of a direct link in milliseconds (what `easytier-cli peer` shows): the preferred connection's,
-/// else the lowest.
-fn direct_latency_ms(peer: &PeerDoc) -> Option<f64> {
-    let micros = |conn: &ConnDoc| conn.stats.as_ref().map(|stats| stats.latency_us);
-    let chosen = default_conn(peer)
-        .and_then(micros)
-        .or_else(|| peer.conns.iter().filter_map(micros).min())?;
-    // The core reports 32-bit microseconds; clamp rather than wrap.
-    Some(f64::from(u32::try_from(chosen).unwrap_or(u32::MAX)) / 1000.0)
-}
-
-fn peer_summary(pair: &PairDoc, route: &RouteDoc) -> PeerSummary {
-    let peer = pair.peer.as_ref();
-    let route_kind = match u32::try_from(route.cost) {
-        Ok(1) => RouteKind::Direct,
-        Ok(hops) if hops >= 2 => RouteKind::Relayed { hops },
-        _ => RouteKind::Unknown,
-    };
-    let latency_ms = match route_kind {
-        RouteKind::Direct => peer.and_then(direct_latency_ms),
-        RouteKind::Relayed { .. } => {
-            let path = route
-                .path_latency_latency_first
-                .unwrap_or(route.path_latency);
-            (path > 0).then(|| f64::from(path))
-        }
-        RouteKind::Unknown => None,
-    };
-    let stats: Vec<&StatsDoc> = peer
-        .into_iter()
-        .flat_map(|peer| peer.conns.iter())
-        .filter_map(|conn| conn.stats.as_ref())
-        .collect();
-    let sum = |field: fn(&StatsDoc) -> u64| {
-        (!stats.is_empty()).then(|| {
-            stats
-                .iter()
-                .fold(0_u64, |total, stats| total.saturating_add(field(stats)))
-        })
-    };
-    let mut tunnels: Vec<&str> = Vec::new();
-    for tunnel in peer
-        .into_iter()
-        .flat_map(|peer| peer.conns.iter())
-        .filter_map(|conn| conn.tunnel.as_ref())
-        .map(|tunnel| tunnel.tunnel_type.as_str())
-        .filter(|tunnel| !tunnel.is_empty())
-    {
-        if !tunnels.contains(&tunnel) {
-            tunnels.push(tunnel);
-        }
-    }
-    PeerSummary {
-        peer_id: route.peer_id,
-        hostname: route.hostname.clone(),
-        virtual_ipv4: route.ipv4_addr.as_ref().and_then(inet),
-        route: route_kind,
-        latency_ms,
-        loss: peer
-            .and_then(default_conn)
-            .map(|conn| f64::from(conn.loss_rate)),
-        rx_bytes: sum(|stats| stats.rx_bytes),
-        tx_bytes: sum(|stats| stats.tx_bytes),
-        tunnel: (!tunnels.is_empty()).then(|| tunnels.join(",")),
-        nat_type: nat(route.stun_info.as_ref()),
-        version: (!route.version.is_empty()).then(|| route.version.clone()),
-    }
 }
 
 /// Maps the running-info JSON of one instance to a snapshot read at `read_at_ms`.
@@ -247,13 +64,7 @@ pub fn snapshot_from_json(
     let doc: InfoDoc =
         serde_json::from_str(json).map_err(|error| MapError::Parse(error.to_string()))?;
     let node = doc.my_node_info.ok_or(MapError::NoNode)?;
-    let peers = doc
-        .peer_route_pairs
-        .iter()
-        .filter_map(|pair| pair.route.as_ref().map(|route| (pair, route)))
-        .filter(|(_, route)| route.peer_id != node.peer_id)
-        .map(|(pair, route)| peer_summary(pair, route))
-        .collect();
+    let peers = pairs::peers(&doc.peer_route_pairs, node.peer_id);
     Ok(NodeSnapshot {
         read_at_ms,
         node: NodeInfo {
@@ -297,6 +108,7 @@ pub fn proxy_cidrs_from_config(config_toml: &str) -> Vec<Ipv4Net> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::state::{NatType, RouteKind};
 
     /// Captured from two `--no-tun` nodes on loopback through easytier-web (`networks/info`), addresses redacted.
     const TWO_NODES: &str =
@@ -387,19 +199,5 @@ mod tests {
             ["192.168.50.0/24".parse::<Ipv4Net>().unwrap()]
         );
         assert!(proxy_cidrs_from_config("= broken").is_empty());
-    }
-
-    #[test]
-    fn protobuf_uuid_quarters_match_the_canonical_text() {
-        let doc = UuidDoc {
-            part1: 1_210_454,
-            part2: 1_709_591_257,
-            part3: 2_790_571_653,
-            part4: 2_326_456_765,
-        };
-        assert_eq!(
-            doc.to_uuid().to_string(),
-            "00127856-65e6-4ad9-a654-be858aaae9bd"
-        );
     }
 }

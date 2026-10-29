@@ -21,6 +21,9 @@ B/easytier-cli -p 127.0.0.1:41100 -o json <node|peer|route|connector|port-forwar
 ```
 `cli-<name>.json` = the output of the matching command (`cli-port-forward.json` = `port-forward list`, `cli-whitelist.json` = `whitelist show`,
 `cli-logger.json` = `logger get`, `cli-credential-list.json` = `credential list`). A (`node-a.toml`) also has `[[proxy_network]]` and `[[port_forward]]`.
+`cli-peer-verbose.json` = `B/easytier-cli -p 127.0.0.1:41100 -v -o json peer` from a later run of the same two nodes (peer ids differ from
+`cli-peer.json`): `-v` prints the raw `PeerRoutePair`s, with byte counters to the byte and latency in microseconds, where `-o json peer`
+alone prints them humanized to three significant digits (`"1.47 kB"`); the node's `inst_id` is `...0003`.
 Note: `rpc_portal` is NOT a TOML key and `no_tun` belongs under `[flags]`; both are passed on the command line.
 
 Config server + REST:

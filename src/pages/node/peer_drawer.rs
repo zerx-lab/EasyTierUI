@@ -5,7 +5,7 @@ use nsh_core::prelude::*;
 
 use super::{
     common::{copy_labels, icon_label_button, nat_word},
-    format::{bytes_text, ip_text, latency_text, loss_text},
+    format::{bytes_text, ip_text, latency_text, loss_text, rate_text},
     peers::{route_lamp, route_word},
 };
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
     profile::ProfileId,
     store::{
         Store,
-        node::{DetailTab, PeerRef},
+        node::{DetailTab, HISTORY_SPAN_MS, PeerRates, PeerRef, TimedSamples},
     },
 };
 
@@ -67,10 +67,19 @@ fn read(store: Store, pick: fn(&PeerSummary) -> String) -> impl Fn() -> String +
     }
 }
 
-/// The facts: address, id, network, route, latency, loss, traffic, tunnel, NAT type and version.
+/// The facts: address, id, network, route, latency, loss, traffic now and in total, tunnel, NAT type and version.
 fn facts(store: Store) -> View {
     let node = store.node();
     let words = store.strings().node.peers;
+    let rate = move |pick: fn(PeerRates) -> Option<f64>| {
+        move || {
+            node.open_peer_ref()
+                .and_then(|reference| {
+                    pick(node.latest_peer_rates(&reference.network, reference.peer_id))
+                })
+                .map_or_else(String::new, rate_text)
+        }
+    };
     let route = move || {
         node.open_peer_ref()
             .and_then(|reference| node.peer(&reference))
@@ -119,15 +128,17 @@ fn facts(store: Store) -> View {
                     .map_or_else(String::new, |loss| loss_text(Some(loss)))
             }),
         ),
+        fact_mono(words.col_rx, rate(|rates| rates.rx_bps)).test_id("peer-rx-rate"),
+        fact_mono(words.col_tx, rate(|rates| rates.tx_bps)).test_id("peer-tx-rate"),
         fact_mono(
-            words.col_rx,
+            words.label_rx_total,
             read(store, |peer| {
                 peer.rx_bytes
                     .map_or_else(String::new, |b| bytes_text(Some(b)))
             }),
         ),
         fact_mono(
-            words.col_tx,
+            words.label_tx_total,
             read(store, |peer| {
                 peer.tx_bytes
                     .map_or_else(String::new, |b| bytes_text(Some(b)))
@@ -166,12 +177,14 @@ fn body(store: Store) -> View {
 /// The two charts and the link to the network.
 fn charts(store: Store) -> View {
     let node = store.node();
-    let samples = move |pick: fn(&crate::store::NodeStore, &ProfileId, u32) -> Vec<f64>| {
-        move || match node.open_peer_ref() {
+    let samples = move |pick: fn(&crate::store::NodeStore, &ProfileId, u32) -> TimedSamples| {
+        computed(move || match node.open_peer_ref() {
             Some(PeerRef { network, peer_id }) => pick(&node, &network, peer_id),
-            None => Vec::new(),
-        }
+            None => TimedSamples::default(),
+        })
     };
+    let latency = samples(|node, network, peer_id| node.peer_latency_samples(network, peer_id));
+    let loss = samples(|node, network, peer_id| node.peer_loss_samples(network, peer_id));
     let heading = |label: fn(&'static crate::i18n::Strings) -> &'static str| {
         body_text(store.tr(label))
             .font_weight(FontWeight::MEDIUM)
@@ -188,17 +201,17 @@ fn charts(store: Store) -> View {
                 .child(
                     metric_chart(
                         store.tr(|s| s.node.peers.chart_peer_latency),
+                        move || latency.with(|samples| samples.t.clone()),
                         vec![chart_series(
                             store.tr(|s| s.node.peers.col_latency),
                             SeriesColor::Chart(3),
-                            samples(|node, network, peer_id| {
-                                node.peer_latency_samples(network, peer_id)
-                            }),
+                            move || latency.with(|samples| samples.values.clone()),
                         )],
                         ChartUnit::Milliseconds,
                         store.tr(|s| s.node.peers.chart_collecting),
                     )
                     .span(
+                        HISTORY_SPAN_MS,
                         store.tr(|s| s.node.peers.chart_span_from),
                         store.tr(|s| s.node.peers.chart_span_to),
                     )
@@ -212,17 +225,17 @@ fn charts(store: Store) -> View {
                 .child(
                     metric_chart(
                         store.tr(|s| s.node.peers.chart_peer_loss),
+                        move || loss.with(|samples| samples.t.clone()),
                         vec![chart_series(
                             store.tr(|s| s.node.peers.col_loss),
                             SeriesColor::Chart(4),
-                            samples(|node, network, peer_id| {
-                                node.peer_loss_samples(network, peer_id)
-                            }),
+                            move || loss.with(|samples| samples.values.clone()),
                         )],
                         ChartUnit::Percent,
                         store.tr(|s| s.node.peers.chart_collecting),
                     )
                     .span(
+                        HISTORY_SPAN_MS,
                         store.tr(|s| s.node.peers.chart_span_from),
                         store.tr(|s| s.node.peers.chart_span_to),
                     )

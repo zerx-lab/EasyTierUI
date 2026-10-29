@@ -1,5 +1,5 @@
 //! The charts of the Peers page and the network drawer: throughput over time and the latency of the slowest peers,
-//! drawn from the history the node store keeps in memory.
+//! drawn from the history the node store keeps in memory, on a time axis of the last three minutes.
 
 use std::rc::Rc;
 
@@ -9,7 +9,10 @@ use nsh_core::prelude::*;
 use crate::{
     components::{ChartUnit, SeriesColor, body_text, card, chart_series, metric_chart},
     profile::ProfileId,
-    store::{Store, node::LatencyLine},
+    store::{
+        Store,
+        node::{HISTORY_SPAN_MS, LATENCY_LINES, LatencyLine},
+    },
 };
 
 /// The networks a chart covers, read where the chart draws (so a changed selection redraws it).
@@ -64,6 +67,7 @@ pub(super) fn throughput_chart(store: Store, scope: Scope, test_id: &'static str
     view().child(
         metric_chart(
             store.tr(|s| s.node.peers.chart_throughput),
+            move || rates.with(|series| series.t.clone()),
             vec![
                 chart_series(
                     store.tr(|s| s.node.peers.legend_received),
@@ -82,6 +86,7 @@ pub(super) fn throughput_chart(store: Store, scope: Scope, test_id: &'static str
             store.tr(|s| s.node.peers.chart_collecting),
         )
         .span(
+            HISTORY_SPAN_MS,
             store.tr(|s| s.node.peers.chart_span_from),
             store.tr(|s| s.node.peers.chart_span_to),
         )
@@ -89,56 +94,48 @@ pub(super) fn throughput_chart(store: Store, scope: Scope, test_id: &'static str
     )
 }
 
-/// The latency of the slowest peers of `scope` (at most five), one line each, on a milliseconds axis. The set of
-/// lines is made again when the set of peers changes, not when a figure does.
+/// The latency of the slowest peers of `scope` (at most five), one line each, on a milliseconds axis. The chart has
+/// a slot per line, filled in the order of the peers' keys, so it stays mounted while peers come and go; a line's
+/// color follows its peer.
 pub(super) fn latency_chart(store: Store, scope: Scope, test_id: &'static str) -> View {
     let node = store.node();
     let lines = computed({
         let scope = scope.clone();
         move || node.latency_lines(&scope())
     });
-    // Who is drawn, in a fixed order: the memo only changes when a peer enters or leaves the top five.
-    let drawn = computed(move || {
-        let mut found: Vec<(String, String)> = lines.with(|lines| {
-            lines
-                .iter()
-                .map(|line| (line.key.clone(), peer_name(store, line)))
-                .collect()
-        });
-        found.sort();
-        found
-    });
-    view().child(dynamic(move || {
-        let found = drawn.get();
-        untracked(move || {
-            let series: Vec<_> = found
-                .into_iter()
-                .map(|(key, label)| {
-                    let color = SeriesColor::hashed(&key);
-                    chart_series(label, color, move || {
-                        lines.with(|lines| {
-                            lines
-                                .iter()
-                                .find(|line| line.key == key)
-                                .map(|line| line.samples.clone())
-                                .unwrap_or_default()
-                        })
-                    })
-                })
-                .collect();
-            metric_chart(
-                store.tr(|s| s.node.peers.chart_latency),
-                series,
-                ChartUnit::Milliseconds,
-                store.tr(|s| s.node.peers.chart_collecting),
+    let series: Vec<_> = (0..LATENCY_LINES)
+        .map(|slot| {
+            let line = move || lines.with(|chart| chart.lines.get(slot).cloned());
+            chart_series(
+                move || {
+                    line()
+                        .map(|line| peer_name(store, &line))
+                        .unwrap_or_default()
+                },
+                SeriesColor::Chart(1),
+                move || line().map(|line| line.samples).unwrap_or_default(),
             )
-            .span(
-                store.tr(|s| s.node.peers.chart_span_from),
-                store.tr(|s| s.node.peers.chart_span_to),
-            )
-            .test_id(format!("{test_id}-latency"))
+            .color_with(move || {
+                line().map_or(SeriesColor::Chart(1), |line| SeriesColor::hashed(&line.key))
+            })
+            .shown_while(move || line().is_some())
         })
-    }))
+        .collect();
+    view().child(
+        metric_chart(
+            store.tr(|s| s.node.peers.chart_latency),
+            move || lines.with(|chart| chart.t.clone()),
+            series,
+            ChartUnit::Milliseconds,
+            store.tr(|s| s.node.peers.chart_collecting),
+        )
+        .span(
+            HISTORY_SPAN_MS,
+            store.tr(|s| s.node.peers.chart_span_from),
+            store.tr(|s| s.node.peers.chart_span_to),
+        )
+        .test_id(format!("{test_id}-latency")),
+    )
 }
 
 /// The name a latency line goes by: the peer's hostname, or its id when it reports none.

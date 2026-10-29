@@ -1,7 +1,7 @@
 //! The last few minutes of every running network, kept in memory for the charts.
 //!
-//! Each poll that lands a snapshot pushes one sample per network into a ring of [`HISTORY_CAPACITY`] samples (about
-//! three minutes at the 2 s poll). A sample keeps what the charts need: the byte totals, the peer counts, and per peer
+//! Each poll that lands a snapshot pushes one sample per network into a ring of [`HISTORY_CAPACITY`] samples (three
+//! minutes at the 1 s poll). A sample keeps what the charts need: the byte totals, the peer counts, and per peer
 //! its latency, loss and byte counters. Rates are derived once, when the sample lands, against the sample before it:
 //!
 //! - a rate is the growth of a peer's counter over the elapsed seconds; a counter that went down (the peer reconnected,
@@ -24,14 +24,17 @@ use crate::{
     profile::ProfileId,
 };
 
-/// How many samples a network keeps: about three minutes at the poll interval.
-pub const HISTORY_CAPACITY: usize = 90;
+/// How many samples a network keeps: [`HISTORY_SPAN_MS`] at the 1 s poll interval.
+pub const HISTORY_CAPACITY: usize = 180;
+/// The time the charts span, up to the newest sample: what the ring holds at the poll interval.
+pub const HISTORY_SPAN_MS: f64 = 180_000.0;
 /// The longest step between two samples that still yields a rate.
 pub const MAX_GAP_MS: f64 = 10_000.0;
 /// Samples closer than this are the same reading (a rate over them would be noise).
 const MIN_STEP_MS: f64 = 1.0;
-/// Samples of different networks closer than this share one point of the aggregate series.
-const AGGREGATE_BUCKET_MS: f64 = 1_000.0;
+/// Readings closer than this belong to one poll and share one moment on a chart's axis: half the 1 s poll interval,
+/// so the networks read in one poll line up and two polls of one network never merge.
+pub const SLOT_MS: f64 = 500.0;
 
 /// Throughput at one moment, in bytes per second.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -42,6 +45,15 @@ pub struct RatePoint {
     pub rx_bps: f64,
     /// Bytes per second sent.
     pub tx_bps: f64,
+}
+
+/// One peer's traffic now, in bytes per second; each direction `None` before two readings of its counter.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct PeerRates {
+    /// Received from the peer.
+    pub rx_bps: Option<f64>,
+    /// Sent to the peer.
+    pub tx_bps: Option<f64>,
 }
 
 /// How many peers a network had at one moment.
@@ -271,6 +283,18 @@ impl History {
             .collect()
     }
 
+    /// Peer `peer_id`'s received and sent rate at the latest sample; each `None` when the peer was not in the sample
+    /// before, a gap came between them, or the core did not count that direction.
+    fn latest_peer_rates(&self, peer_id: u32) -> PeerRates {
+        self.samples
+            .back()
+            .and_then(|sample| sample.peers.iter().find(|peer| peer.peer_id == peer_id))
+            .map_or(PeerRates::default(), |peer| PeerRates {
+                rx_bps: peer.rx_bps,
+                tx_bps: peer.tx_bps,
+            })
+    }
+
     /// The `n` peers of the latest sample with the highest latency, each with its latency series.
     fn top_latency(&self, n: usize) -> Vec<PeerSeries> {
         let Some(last) = self.samples.back() else {
@@ -325,7 +349,7 @@ fn aggregate_counts<'a>(histories: impl Iterator<Item = &'a History>) -> Option<
 }
 
 /// The traffic of all networks over time. Networks are polled at slightly different moments, so the samples are
-/// grouped (those within [`AGGREGATE_BUCKET_MS`] of the group's first) and each group sums, per network, its latest
+/// grouped (those within [`SLOT_MS`] of the group's first) and each group sums, per network, its latest
 /// rate at or before the group's last sample, when that is not older than [`MAX_GAP_MS`].
 fn aggregate_rate_series<'a>(histories: impl Iterator<Item = &'a History>) -> Vec<RatePoint> {
     let series: Vec<Vec<RatePoint>> = histories.map(History::rate_series).collect();
@@ -334,7 +358,7 @@ fn aggregate_rate_series<'a>(histories: impl Iterator<Item = &'a History>) -> Ve
     let mut ends: Vec<f64> = Vec::new();
     let mut group_start: Option<f64> = None;
     for t in times {
-        let joins = group_start.is_some_and(|start| t - start <= AGGREGATE_BUCKET_MS);
+        let joins = group_start.is_some_and(|start| t - start <= SLOT_MS);
         if joins && let Some(end) = ends.last_mut() {
             *end = t;
             continue;
@@ -497,6 +521,15 @@ impl NodeStore {
         })
     }
 
+    /// Peer `peer_id`'s received and sent rate in network `id` now (bytes per second at the latest sample).
+    pub fn latest_peer_rates(&self, id: &ProfileId, peer_id: u32) -> PeerRates {
+        self.read_history(|map| {
+            map.get(id).map_or(PeerRates::default(), |history| {
+                history.latest_peer_rates(peer_id)
+            })
+        })
+    }
+
     /// The `n` peers of network `id` with the highest latency now, each with its latency series (the Peers page's
     /// latency chart).
     pub fn top_latency_series(&self, id: &ProfileId, n: usize) -> Vec<PeerSeries> {
@@ -654,21 +687,21 @@ mod tests {
     }
 
     #[test]
-    fn the_ring_keeps_the_newest_ninety() {
+    fn the_ring_keeps_the_newest_three_minutes() {
         let mut history = History::default();
-        for step in 0..115_u32 {
-            let bytes = u64::from(step).saturating_mul(2_000);
+        for step in 0..205_u32 {
+            let bytes = u64::from(step).saturating_mul(1_000);
             pushed(
                 &mut history,
-                f64::from(step) * 2_000.0,
+                f64::from(step) * 1_000.0,
                 vec![peer(1, bytes, 0)],
             );
         }
         assert_eq!(history.len(), HISTORY_CAPACITY);
         let series = history.rate_series();
         assert_eq!(series.len(), HISTORY_CAPACITY);
-        assert_eq!(series.first().map(|p| p.t_ms), Some(25.0 * 2_000.0));
-        assert_eq!(series.last().map(|p| p.t_ms), Some(114.0 * 2_000.0));
+        assert_eq!(series.first().map(|p| p.t_ms), Some(25.0 * 1_000.0));
+        assert_eq!(series.last().map(|p| p.t_ms), Some(204.0 * 1_000.0));
     }
 
     #[test]
@@ -769,20 +802,21 @@ mod tests {
         let mut a = History::default();
         let mut b = History::default();
         for step in 0..3_u32 {
-            let t = 1_000_000.0 + f64::from(step) * 2_000.0;
+            // One poll a second; the second network's reading lands 300 ms after the first's.
+            let t = 1_000_000.0 + f64::from(step) * 1_000.0;
             let bytes = u64::from(step);
-            pushed(&mut a, t, vec![peer(1, bytes.saturating_mul(2_000), 0)]);
+            pushed(&mut a, t, vec![peer(1, bytes.saturating_mul(1_000), 0)]);
             pushed(
                 &mut b,
                 t + 300.0,
-                vec![peer(1, bytes.saturating_mul(6_000), 0)],
+                vec![peer(1, bytes.saturating_mul(3_000), 0)],
             );
         }
         let series = aggregate_rate_series([&a, &b].into_iter());
         assert_eq!(series.len(), 2);
         assert!(series.iter().all(|p| p.rx_bps == 4_000.0));
-        assert_eq!(series.first().map(|p| p.t_ms), Some(1_002_300.0));
-        assert_eq!(series.last().map(|p| p.t_ms), Some(1_004_300.0));
+        assert_eq!(series.first().map(|p| p.t_ms), Some(1_001_300.0));
+        assert_eq!(series.last().map(|p| p.t_ms), Some(1_002_300.0));
         assert!(aggregate_rate_series(std::iter::empty()).is_empty());
     }
 
