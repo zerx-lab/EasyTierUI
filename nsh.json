@@ -3,6 +3,7 @@
   "id": "com.example.easytierui",
   "version": "1.0.0",
   "build": 1,
+  "icon": "brand/icon.png",
   "rust": ".",
   "root": "App",
   "theme": "theme.json",

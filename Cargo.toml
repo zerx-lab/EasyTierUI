@@ -5,6 +5,8 @@ edition = "2024"
 publish = false
 
 [workspace]
+# The EasyTier library bridge for the mobile builds (its own lint table: UniFFI generates `unsafe`).
+members = ["crates/easytier-mobile"]
 
 # Panic-free, unsafe-free Rust (AGENTS.md "Rust safety"). `clippy.toml` lets
 # test code panic; `cargo clippy --all-targets -- -D warnings` turns every
@@ -48,16 +50,64 @@ nsh-core = "0.3.0"
 nsh-base = "0.3.0"
 env_logger = "0.11"
 log = "0.4"
+# Errors the UI can match on (AGENTS.md "Code conventions").
+thiserror = "2"
+# EasyTier's config file, CLI JSON and easytier-web's REST bodies.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+# Peer / listener URLs and CIDRs from untrusted input.
+url = "2.5"
+ipnet = { version = "2", features = ["serde"] }
+# Release digests (sha256) and easytier-web's login pre-hash (MD5, what its frontend sends).
+sha2 = "0.10"
+md-5 = "0.10"
+# Generated secrets and share links.
+base64 = "0.22"
+# Secrets are wiped from memory when dropped.
+zeroize = "1"
+uuid = { version = "1", features = ["serde"] }
+# Share-link QR codes: encodes text to a module matrix (pure Rust, no dependencies).
+qrcodegen = "1"
+# Reads a QR code from picked image pixels; `default-features = false` drops its `image` crate integration.
+rqrr = { version = "0.10", default-features = false }
+# Decodes picked PNG screenshots of a QR code (already in the tree through NSH's image support); also renders test images.
+png = "0.18"
+# Decodes picked JPEG photos of a QR code; no SIMD feature, so the untrusted-input decoder stays in safe Rust.
+zune-jpeg = { version = "0.5", default-features = false, features = ["std"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+getrandom = "0.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# The desktops run EasyTier's official programs: data directory, release zips, the OS keychain, and the
+# administrator prompt that installs a TUN node as an OS service.
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+dirs = "6"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nsh-platform-linux = { version = "0.3.0", default-features = false }
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 nsh-platform-macos = { version = "0.3.0", default-features = false }
+keyring = { version = "3", features = ["apple-native"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 nsh-platform-windows = { version = "0.3.0", default-features = false }
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+dirs = "6"
+keyring = { version = "3", features = ["apple-native"] }
+
+# iOS / Android run EasyTier's library in process (a platform constraint, AGENTS.md "Mobile is the exception"):
+# the bridge crate links it from git; desktops never compile it.
+[target.'cfg(any(target_os = "ios", target_os = "android"))'.dependencies]
+easytier-mobile = { path = "crates/easytier-mobile" }
 
 [dev-dependencies]
-nsh-engine = "0.3.0"
+# `net`: the engine's real HTTP stack, for the ignored smoke that drives a loopback easytier-web (tests/app/smoke.rs).
+nsh-engine = { version = "0.3.0", features = ["net"] }
 nsh-testing = "0.3.0"

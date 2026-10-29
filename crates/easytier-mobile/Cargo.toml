@@ -1,0 +1,84 @@
+[package]
+name = "easytier-mobile"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "EasyTier's library behind a small safe API and a UniFFI surface, for the iOS / Android builds of EasyTierUI"
+# Links EasyTier (LGPL-3.0): see README.md before distributing a build.
+publish = false
+
+[lib]
+# `lib` is what the app links; `staticlib` / `cdylib` are for a host app that generates Kotlin / Swift bindings.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+# Generates the Kotlin / Swift bindings: `cargo run --features bindgen --bin uniffi-bindgen -- generate ...`.
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+# The same table as the app's Cargo.toml, with one difference: UniFFI's generated scaffolding is `unsafe extern "C"`
+# code that cannot live in a `forbid(unsafe_code)` crate. Hand-written `unsafe` is `deny` plus a required
+# `// SAFETY:` comment; this crate has none.
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+dbg_macro = "deny"
+get_unwrap = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+unwrap_in_result = "deny"
+panic_in_result_fn = "deny"
+fallible_impl_from = "deny"
+exit = "deny"
+mem_forget = "deny"
+arithmetic_side_effects = "warn"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
+print_stdout = "deny"
+print_stderr = "deny"
+let_underscore_must_use = "deny"
+unused_result_ok = "warn"
+allow_attributes_without_reason = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[dependencies]
+# EasyTier's library, pinned to the v2.6.4 release commit (crates.io's `easytier` is stale at 2.0.3). LGPL-3.0.
+# Features: the transports and proxies that cross-compile for iOS and Android. `tun` and `magic-dns` are required by
+# upstream's own mobile code path (`setup_nic_ctx_for_mobile` calls both; the VpnService / packet-tunnel fd arrives
+# through `set_tun_fd`): they create no device by themselves.
+easytier = { git = "https://github.com/EasyTier/EasyTier", rev = "8428a89d2dabc94c97d370ec607c6ca142473626", default-features = false, features = ["websocket", "smoltcp", "socks5", "quic", "wireguard", "tun", "magic-dns"] }
+# Foreign-language bindings (Kotlin / Swift) generated from the proc macros.
+uniffi = "0.32"
+# The runtime the instance manager's async info calls run on (a library user is not inside a tokio context).
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
+# One error enum per module, matchable by the UI.
+thiserror = "2"
+# Captures EasyTier's `tracing` output into a bounded, redacted ring buffer.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
+# Pre-parses the config to find its secrets and to report syntax errors without echoing the file.
+toml = "1"
+# The running info as JSON (the schema easytier-web's REST API returns too).
+serde_json = "1"
+# `ConfigLoader::get_id` returns it.
+uuid = "1"
+# The config-server hook trait is `#[async_trait]`.
+async-trait = "0.1"
+
+# Not used by this crate: caps libc below 0.2.191, which restricted `RTAX_MAX` to macOS and so broke netdev 0.31.0
+# (EasyTier's natpmp -> netdev) on iOS. Drop it when netdev is fixed upstream.
+[target.'cfg(target_os = "ios")'.dependencies]
+libc = ">=0.2.186, <0.2.191"
