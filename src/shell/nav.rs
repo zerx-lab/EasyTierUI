@@ -59,8 +59,18 @@ fn kind_word(kind: TargetKind, strings: &'static Strings) -> &'static str {
     }
 }
 
-/// The Target Switcher (DESIGN.md signature): the selected target's name and lamp; opening it lists every target.
+/// The Target Switcher (DESIGN.md signature): the selected target's name and lamp; opening it lists every target the
+/// work mode serves. A node alone has one target, so there it is a plain row without a menu.
 pub fn target_switcher(store: Store) -> impl IntoElement {
+    let switches = move || {
+        let roles = store.roles();
+        roles.contains(Role::Console) || roles.contains(Role::Host)
+    };
+    when(switches, move || switcher_menu(store)).otherwise(move || switcher_face(store, false))
+}
+
+/// The selected target's name, kind and lamp; `opens_menu` adds the hover and the chevron of a menu's trigger.
+fn switcher_face(store: Store, opens_menu: bool) -> View {
     let name = move || {
         store
             .current_target()
@@ -74,7 +84,7 @@ pub fn target_switcher(store: Store) -> impl IntoElement {
                 (target.status, target.kind)
             })
     };
-    let trigger = view()
+    view()
         .flex_row()
         .items_center()
         .gap_2()
@@ -82,7 +92,9 @@ pub fn target_switcher(store: Store) -> impl IntoElement {
         .px_2p5()
         .py_1()
         .rounded(control_radius)
-        .hover(|s| s.bg(move || theme().sidebar_accent))
+        .when(opens_menu, |face| {
+            face.hover(|s| s.bg(move || theme().sidebar_accent))
+        })
         .child(
             view()
                 .flex_1()
@@ -112,49 +124,62 @@ pub fn target_switcher(store: Store) -> impl IntoElement {
                     move || target_lamp(status(), store.strings()).1,
                 )),
         )
-        .child(icon(Icon::ChevronDown, ICON_SIZE));
-    let add_server = menu_item()
-        .on_select(move || store.console().request_add_server())
+        .when(opens_menu, |face| {
+            face.child(icon(Icon::ChevronDown, ICON_SIZE))
+        })
+}
+
+/// The switcher's menu: the listed targets, then adding a server and hosting here where the mode shows them.
+fn switcher_menu(store: Store) -> impl IntoElement {
+    let hosts_here = store.capabilities().host.is_local();
+    let adds_server = move || store.roles().contains(Role::Console);
+    let hosts = move || hosts_here && store.roles().contains(Role::Host);
+    menu()
+        .popup_class("min-w-56 rounded-(--radius) border border-border bg-popover p-1 shadow-md")
+        .trigger(switcher_face(store, true))
+        .child(each(
+            move || store.listed_targets(),
+            |target: &Target| target.id,
+            move |target, _| target_item(store, target),
+        ))
+        .child(when(
+            move || adds_server() || hosts(),
+            move || {
+                menu_separator()
+                    .my_1()
+                    .border_t_1()
+                    .border_color(move || theme().border)
+            },
+        ))
+        .child(when(adds_server, move || {
+            menu_action(store.tr(|s| s.target_add_server), move || {
+                store.console().request_add_server();
+            })
+        }))
+        .child(when(hosts, move || {
+            menu_action(store.tr(|s| s.target_host_here), move || {
+                store.open(Page::HostStatus);
+            })
+        }))
+}
+
+/// An action at the end of the switcher's menu.
+fn menu_action(
+    label: impl IntoReactive<SharedString>,
+    on_select: impl Fn() + 'static,
+) -> impl IntoElement {
+    menu_item()
+        .on_select(on_select)
         .px_2p5()
         .py_1p5()
         .min_h_8()
         .rounded(control_radius)
         .hover(|s| s.bg(move || theme().accent))
         .child(
-            text(store.tr(|s| s.target_add_server))
+            text(label)
                 .text_sm()
                 .text_color(move || theme().popover_foreground),
-        );
-    let host_here = store.capabilities().host.is_local().then(|| {
-        menu_item()
-            .on_select(move || store.open(Page::HostStatus))
-            .px_2p5()
-            .py_1p5()
-            .min_h_8()
-            .rounded(control_radius)
-            .hover(|s| s.bg(move || theme().accent))
-            .child(
-                text(store.tr(|s| s.target_host_here))
-                    .text_sm()
-                    .text_color(move || theme().popover_foreground),
-            )
-    });
-    menu()
-        .popup_class("min-w-56 rounded-(--radius) border border-border bg-popover p-1 shadow-md")
-        .trigger(trigger)
-        .child(each(
-            move || store.targets(),
-            |target: &Target| target.id,
-            move |target, _| target_item(store, target),
-        ))
-        .child(
-            menu_separator()
-                .my_1()
-                .border_t_1()
-                .border_color(move || theme().border),
         )
-        .child(add_server)
-        .child(host_here)
 }
 
 /// A target in the switcher's menu: choosing it selects it.
@@ -192,14 +217,22 @@ fn target_item(store: Store, target: ReadSignal<Target>) -> impl IntoElement {
         ))
 }
 
-/// Every role's section: its label and its pages. `highlight` marks the selected page (the sidebar does; a
-/// phone's home list does not).
+/// The sections of the roles the work mode shows: each role's label (left out when it is the only one) and its
+/// pages, then a row for each hidden role that still runs something here. `highlight` marks the selected page (the
+/// sidebar does; a phone's home list does not).
 pub fn role_sections(store: Store, highlight: bool) -> View {
-    let sections: Vec<_> = Role::ALL
-        .into_iter()
-        .map(|role| role_section(store, role, highlight))
-        .collect();
-    view().gap_4().child(sections)
+    view()
+        .gap_4()
+        .child(each(
+            move || store.roles().roles(),
+            |role: &Role| *role,
+            move |role, _| role_section(store, role.get_untracked(), highlight),
+        ))
+        .child(each(
+            move || store.hidden_running(),
+            |role: &Role| *role,
+            move |role, _| hidden_running_item(store, role.get_untracked(), highlight),
+        ))
 }
 
 fn role_section(store: Store, role: Role, highlight: bool) -> View {
@@ -214,8 +247,32 @@ fn role_section(store: Store, role: Role, highlight: bool) -> View {
         .collect();
     view()
         .gap_0p5()
-        .child(view().px_2p5().pb_1().child(section_label(store.tr(label))))
+        .child(when(
+            move || store.roles().roles().len() > 1,
+            move || view().px_2p5().pb_1().child(section_label(store.tr(label))),
+        ))
         .child(items)
+}
+
+/// The way to a hidden role that still runs something here (this device's networks, the hosted control plane):
+/// hiding a role never hides a running process. It opens the role's first page.
+fn hidden_running_item(store: Store, role: Role, highlight: bool) -> View {
+    let label: Pick = match role {
+        Role::Node => |s| s.hidden_node_running,
+        Role::Console => |s| s.role_console,
+        Role::Host => |s| s.hidden_host_running,
+    };
+    let first = Page::of_role(role)
+        .first()
+        .copied()
+        .unwrap_or(Page::Settings);
+    nav_item(
+        page_icon(first),
+        store.tr(label),
+        &format!("hidden-{}", first.key()),
+        move || highlight && store.page().role() == Some(role),
+        move || store.open(first),
+    )
 }
 
 /// The navigation row of `page`.

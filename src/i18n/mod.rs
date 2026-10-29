@@ -109,6 +109,37 @@ pub struct Strings {
     pub role_console: &'static str,
     /// Role: hosting or deploying easytier-web.
     pub role_host: &'static str,
+    /// What the node role shows, in the work-mode settings.
+    pub role_node_body: &'static str,
+    /// What the console role shows.
+    pub role_console_body: &'static str,
+    /// What the host role shows.
+    pub role_host_body: &'static str,
+
+    /// First run: the work-mode question.
+    pub mode_title: &'static str,
+    /// What the choice decides, and that it can change later.
+    pub mode_intro: &'static str,
+    /// Work mode: a device that joins networks.
+    pub mode_client: &'static str,
+    /// What the client mode shows.
+    pub mode_client_body: &'static str,
+    /// Work mode: everything, for administrators.
+    pub mode_control: &'static str,
+    /// What the control mode shows.
+    pub mode_control_body: &'static str,
+    /// Work mode: the roles the user picks.
+    pub mode_custom: &'static str,
+    /// What the custom mode shows, and that one role stays on.
+    pub mode_custom_body: &'static str,
+    /// First run: confirms the choice.
+    pub mode_continue: &'static str,
+    /// Settings: what hiding a role does (nothing stops).
+    pub mode_hidden_note: &'static str,
+    /// Sidebar: the node is hidden, and this device's networks run.
+    pub hidden_node_running: &'static str,
+    /// Sidebar: the host is hidden, and the hosted control plane runs.
+    pub hidden_host_running: &'static str,
 
     /// Page: the node's networks.
     pub page_networks: &'static str,
@@ -200,6 +231,8 @@ pub struct Strings {
     /// What it generates, and that nothing is applied.
     pub deployment_empty_body: &'static str,
 
+    /// Settings: the work-mode section.
+    pub settings_mode: &'static str,
     /// Settings: the language section.
     pub settings_language: &'static str,
     /// Language choice: follow the system.

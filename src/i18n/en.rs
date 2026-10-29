@@ -11,6 +11,24 @@ pub(super) static STRINGS: Strings = Strings {
     role_node: "Node",
     role_console: "Console",
     role_host: "Control plane",
+    role_node_body: "This device joins networks and sees its peers",
+    role_console_body: "Manage an easytier-web server's machines, networks and credentials",
+    role_host_body: "Host easytier-web here, or generate a server's deployment files",
+
+    mode_title: "How will you use EasyTierUI?",
+    mode_intro: "This decides what the sidebar shows. You can change it in Settings at any time.",
+    mode_client: "Client",
+    mode_client_body: "This device joins networks: create one, join one, or let a control plane manage it.",
+    mode_control: "Control",
+    mode_control_body: "Everything a client does, plus managing easytier-web servers and hosting or deploying a \
+                        control plane.",
+    mode_custom: "Custom",
+    mode_custom_body: "Only the roles turned on below are shown; one always stays on.",
+    mode_continue: "Continue",
+    mode_hidden_note: "Hiding a role stops nothing: running networks and control planes keep running, and \
+                       everything stays saved.",
+    hidden_node_running: "Node still running",
+    hidden_host_running: "Control plane still running",
 
     page_networks: "Networks",
     page_peers: "Peers",
@@ -64,6 +82,7 @@ pub(super) static STRINGS: Strings = Strings {
     deployment_empty_body: "Docker Compose, systemd and reverse-proxy files for a server are generated here with \
                             safe defaults. Nothing is applied to a server from this app.",
 
+    settings_mode: "Work mode",
     settings_language: "Language",
     language_system: "System",
     language_zh_cn: "简体中文",

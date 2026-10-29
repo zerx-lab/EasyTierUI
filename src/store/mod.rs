@@ -2,7 +2,7 @@
 //! state only through the functions here; each target keeps its own page, so switching targets loses nothing.
 //!
 //! Each role keeps its state in its own sub-store (`node`, `console`, `host`, `versions`), reached through
-//! [`Store::node`] and friends; the root keeps what the shell needs: targets, pages, language, sidebar.
+//! [`Store::node`] and friends; the root keeps what the shell needs: targets, pages, language, work mode, sidebar.
 
 pub mod console;
 pub mod host;
@@ -19,7 +19,7 @@ use crate::{
         keychain::{SecretStore, system_store},
         node::ProgramSource,
         platform::{Capabilities, Platform},
-        role::Role,
+        role::{Role, RoleSet, WorkMode},
         target::{Target, TargetId, TargetKind, TargetStatus},
     },
     i18n::{LanguageChoice, Pick, Strings},
@@ -27,6 +27,8 @@ use crate::{
 
 /// The storage key of the user's language choice.
 const LANGUAGE_KEY: &str = "ui.language";
+/// The storage key of the user's work mode ([`WorkMode::as_key`]); absent until the first run's choice.
+const MODE_KEY: &str = "ui.mode";
 /// The storage key of the sidebar's state, set to [`SIDEBAR_COLLAPSED`] while the user keeps it hidden.
 const SIDEBAR_KEY: &str = "ui.sidebar";
 const SIDEBAR_COLLAPSED: &str = "collapsed";
@@ -100,6 +102,21 @@ impl Page {
         }
     }
 
+    /// The role whose section lists it; `None` for the settings, which every mode shows.
+    pub fn role(self) -> Option<Role> {
+        match self {
+            Page::Networks | Page::Peers => Some(Role::Node),
+            Page::Machines | Page::ServerNetworks | Page::Credentials => Some(Role::Console),
+            Page::HostStatus | Page::Hardening | Page::Deployment => Some(Role::Host),
+            Page::Settings => None,
+        }
+    }
+
+    /// Whether the shell lists it under `roles`.
+    fn listed_under(self, roles: RoleSet) -> bool {
+        self.role().is_none_or(|role| roles.contains(role))
+    }
+
     /// Its title.
     pub fn title(self, strings: &'static Strings) -> &'static str {
         match self {
@@ -130,14 +147,34 @@ impl Page {
         }
     }
 
-    /// The page a target opens on: its node for this device, its console for a server.
-    fn first_of(kind: TargetKind) -> Page {
-        match kind {
+    /// The page a target opens on under `roles`: its node for this device, its console for a server, else the
+    /// first page the shell lists.
+    fn first_of(kind: TargetKind, roles: RoleSet) -> Page {
+        let first = match kind {
             TargetKind::ThisDevice => Page::Networks,
             TargetKind::Server => Page::Machines,
             TargetKind::Hosted => Page::HostStatus,
+        };
+        if first.listed_under(roles) {
+            return first;
         }
+        roles
+            .roles()
+            .into_iter()
+            .find_map(|role| Page::of_role(role).first().copied())
+            .unwrap_or(Page::Settings)
     }
+}
+
+/// Whether the target switcher lists `target` under `roles`: servers serve the console, the hosted control plane the
+/// host and the console; the primary target is always listed.
+fn target_listed(target: &Target, roles: RoleSet) -> bool {
+    target.id == TargetId::PRIMARY
+        || match target.kind {
+            TargetKind::ThisDevice => roles.contains(Role::Node),
+            TargetKind::Server => roles.contains(Role::Console),
+            TargetKind::Hosted => roles.contains(Role::Host) || roles.contains(Role::Console),
+        }
 }
 
 /// The app's state: made once by the root and passed down to the shell and the pages (`Copy` handles).
@@ -151,6 +188,8 @@ pub struct Store {
     /// Compact layouts: the pages pushed over the home page, bottom to top.
     stack: Signal<Vec<Page>>,
     language: Signal<LanguageChoice>,
+    /// The user's work mode; `None` until the first run's choice.
+    mode: Signal<Option<WorkMode>>,
     /// Wide layouts: the sidebar is shown.
     sidebar_open: Signal<bool>,
     /// Whether secrets survive a restart here (the keychain is reachable).
@@ -162,14 +201,21 @@ pub struct Store {
 }
 
 impl Store {
-    /// The state of a fresh start on `platform`, with the language choice and sidebar state the user kept; each
-    /// role then restores what it kept (servers, running networks, the hosted control plane).
+    /// The state of a fresh start on `platform`, with the language choice, work mode and sidebar state the user
+    /// kept; each role then restores what it kept (servers, running networks, the hosted control plane).
     pub fn new(platform: Platform) -> Self {
         let language = match Storage::get_item(LANGUAGE_KEY) {
             None => LanguageChoice::default(),
             Some(kept) => LanguageChoice::from_key(&kept).unwrap_or_else(|| {
                 log::warn!("unknown language choice {kept:?} in storage; following the system");
                 LanguageChoice::default()
+            }),
+        };
+        let mode = match Storage::get_item(MODE_KEY) {
+            None => WorkMode::implied_by(platform),
+            Some(kept) => WorkMode::from_key(&kept).or_else(|| {
+                log::warn!("unknown work mode {kept:?} in storage; asking again");
+                WorkMode::implied_by(platform)
             }),
         };
         let sidebar_open = Storage::get_item(SIDEBAR_KEY).as_deref() != Some(SIDEBAR_COLLAPSED);
@@ -191,6 +237,7 @@ impl Store {
             pages: signal(BTreeMap::new()),
             stack: signal(Vec::new()),
             language: signal(language),
+            mode: signal(mode),
             sidebar_open: signal(sidebar_open),
             secrets_persistent: secrets.persistent(),
             node: NodeStore::new(&env),
@@ -369,16 +416,18 @@ impl Store {
         }
     }
 
-    /// The page the selected target shows (tracked).
+    /// The page the selected target shows (tracked): the one opened last, else its first under the work mode.
     pub fn page(&self) -> Page {
         let id = self.current.get();
         let kept = self.pages.with(|pages| pages.get(&id).copied());
         kept.unwrap_or_else(|| {
+            let roles = self.roles();
             self.targets.with(|targets| {
-                targets
+                let kind = targets
                     .iter()
                     .find(|t| t.id == id)
-                    .map_or(Page::Networks, |t| Page::first_of(t.kind))
+                    .map_or(TargetKind::ThisDevice, |t| t.kind);
+                Page::first_of(kind, roles)
             })
         })
     }
@@ -420,6 +469,62 @@ impl Store {
         }
     }
 
+    /// The user's work mode (tracked); `None` until the first run's choice.
+    pub fn mode(&self) -> Option<WorkMode> {
+        self.mode.get()
+    }
+
+    /// The roles the shell shows (tracked); the node alone until the first run's choice.
+    pub fn roles(&self) -> RoleSet {
+        self.mode.get().map_or(RoleSet::NODE, WorkMode::roles)
+    }
+
+    /// Switches the work mode and keeps the choice. Nothing of a hidden role stops or is forgotten: its networks,
+    /// servers and control plane keep running; only the pages it had open close, and a target the mode no longer
+    /// lists hands the selection to the primary one.
+    pub fn set_mode(&self, mode: WorkMode) {
+        let roles = mode.roles();
+        batch(|| {
+            self.mode.set(Some(mode));
+            self.pages
+                .update(|pages| pages.retain(|_, page| page.listed_under(roles)));
+            self.stack
+                .update(|stack| stack.retain(|page| page.listed_under(roles)));
+            let current = self.current.get_untracked();
+            let listed = self.targets.with_untracked(|targets| {
+                targets
+                    .iter()
+                    .any(|t| t.id == current && target_listed(t, roles))
+            });
+            if !listed {
+                self.current.set(TargetId::PRIMARY);
+                self.stack.set(Vec::new());
+            }
+        });
+        if let Err(full) = Storage::set_item(MODE_KEY, mode.as_key()) {
+            log::warn!("work mode not kept: storage full at {} bytes", full.bytes);
+        }
+    }
+
+    /// The targets the switcher lists under the work mode (tracked).
+    pub fn listed_targets(&self) -> Vec<Target> {
+        let roles = self.roles();
+        self.targets.with(|targets| {
+            targets
+                .iter()
+                .filter(|t| target_listed(t, roles))
+                .cloned()
+                .collect()
+        })
+    }
+
+    /// The hidden roles that still run something here (tracked): this device's networks for the node, the hosted
+    /// easytier-web for the host. The shell keeps a way to them, so hiding a role never hides a running process.
+    pub fn hidden_running(&self) -> Vec<Role> {
+        let roles = self.roles();
+        self.targets.with(|targets| hidden_running(roles, targets))
+    }
+
     /// The UI's strings in the chosen or the system's language (tracked).
     pub fn strings(&self) -> &'static Strings {
         self.language.get().resolve(locale().as_str()).strings()
@@ -428,5 +533,137 @@ impl Store {
     /// A binding of the string `pick` chooses, following the language as it changes.
     pub fn tr(self, pick: Pick) -> impl Fn() -> &'static str + Copy + 'static {
         move || pick(self.strings())
+    }
+}
+
+/// The roles outside `roles` that run something among `targets`: this device's networks for the node, the hosted
+/// easytier-web for the host; a console's signed-in session runs nothing here.
+fn hidden_running(roles: RoleSet, targets: &[Target]) -> Vec<Role> {
+    Role::ALL
+        .into_iter()
+        .filter(|role| !roles.contains(*role))
+        .filter(|role| {
+            let kind = match role {
+                Role::Node => TargetKind::ThisDevice,
+                Role::Host => TargetKind::Hosted,
+                Role::Console => return false,
+            };
+            targets.iter().any(|t| {
+                t.kind == kind
+                    && matches!(t.status, TargetStatus::Online | TargetStatus::Connecting)
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::target::TargetOrigin;
+
+    fn target(id: TargetId, kind: TargetKind, status: TargetStatus) -> Target {
+        let origin = match kind {
+            TargetKind::ThisDevice => TargetOrigin::Local,
+            TargetKind::Server => TargetOrigin::Url("https://et.example.com".to_owned()),
+            TargetKind::Hosted => TargetOrigin::Loopback { port: 11211 },
+        };
+        Target {
+            id,
+            kind,
+            origin,
+            name: None,
+            status,
+        }
+    }
+
+    fn server() -> Target {
+        let id = TargetId::next_after([TargetId::PRIMARY], 0).unwrap();
+        target(id, TargetKind::Server, TargetStatus::Online)
+    }
+
+    #[test]
+    fn a_client_lists_only_this_device() {
+        let device = target(
+            TargetId::PRIMARY,
+            TargetKind::ThisDevice,
+            TargetStatus::Stopped,
+        );
+        let hosted = target(TargetId::HOSTED, TargetKind::Hosted, TargetStatus::Online);
+        assert!(target_listed(&device, RoleSet::NODE));
+        assert!(!target_listed(&server(), RoleSet::NODE));
+        assert!(!target_listed(&hosted, RoleSet::NODE));
+        // The hosted control plane serves the console as well as the host.
+        let console = RoleSet::of([Role::Console]).unwrap();
+        assert!(target_listed(&hosted, console));
+        assert!(target_listed(&server(), console));
+    }
+
+    #[test]
+    fn the_web_builds_server_stays_listed_whatever_the_mode() {
+        let served = Target {
+            origin: TargetOrigin::SameOrigin,
+            ..target(
+                TargetId::PRIMARY,
+                TargetKind::Server,
+                TargetStatus::NotConnected,
+            )
+        };
+        assert!(target_listed(&served, RoleSet::NODE));
+    }
+
+    #[test]
+    fn a_target_opens_on_a_page_its_mode_lists() {
+        assert_eq!(
+            Page::first_of(TargetKind::ThisDevice, RoleSet::NODE),
+            Page::Networks
+        );
+        assert_eq!(
+            Page::first_of(TargetKind::Server, RoleSet::ALL),
+            Page::Machines
+        );
+        // The web build's server under a node-only mode opens on the node, which offers the server's nodes.
+        assert_eq!(
+            Page::first_of(TargetKind::Server, RoleSet::NODE),
+            Page::Networks
+        );
+        let host = RoleSet::of([Role::Host]).unwrap();
+        assert_eq!(
+            Page::first_of(TargetKind::ThisDevice, host),
+            Page::HostStatus
+        );
+    }
+
+    #[test]
+    fn a_hidden_role_that_runs_something_stays_reachable() {
+        let running = [
+            target(
+                TargetId::PRIMARY,
+                TargetKind::ThisDevice,
+                TargetStatus::Online,
+            ),
+            target(
+                TargetId::HOSTED,
+                TargetKind::Hosted,
+                TargetStatus::Connecting,
+            ),
+            server(),
+        ];
+        assert_eq!(hidden_running(RoleSet::ALL, &running), vec![]);
+        assert_eq!(hidden_running(RoleSet::NODE, &running), vec![Role::Host]);
+        let console = RoleSet::of([Role::Console]).unwrap();
+        assert_eq!(
+            hidden_running(console, &running),
+            vec![Role::Node, Role::Host]
+        );
+
+        let stopped = [
+            target(
+                TargetId::PRIMARY,
+                TargetKind::ThisDevice,
+                TargetStatus::Stopped,
+            ),
+            target(TargetId::HOSTED, TargetKind::Hosted, TargetStatus::Failed),
+        ];
+        assert_eq!(hidden_running(console, &stopped), vec![]);
     }
 }

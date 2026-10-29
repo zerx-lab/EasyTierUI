@@ -409,7 +409,16 @@ page gutter, 24 (`_6`) between sections, 32 (`_8`) around empty states.
 - **Shell on every platform:** a target switcher (this device, each easytier-web server, the hosted control plane) sits
   above the role's sections — Node (networks, peers), Console (machines, networks, credentials), Host (status,
   hardening, deployment). Switching keeps each target's state; nothing is hidden by platform, unavailable actions show a
-  Capability Notice.
+  Capability Notice. The user's work mode decides which roles are listed: a client lists the node alone (its pages
+  without a section label, the target switcher a plain row without a menu), control lists every role, custom the
+  roles the user turned on. A hidden role that still runs something here (this device's networks, the hosted control
+  plane) keeps one sidebar row ("Control plane still running" / "控制平面仍在运行") that opens its pages.
+- **First run (desktops and phones):** before the shell, one centered question (at most 560 pt wide, comfortable
+  density): "How will you use EasyTierUI?" / "选择工作模式", two radio cards — Client / 客户端 (preselected) and
+  Control / 控制端, each an icon, its name and one sentence; a checked card has a Cobalt edge, icon and radio dot — and
+  one primary Continue. Under the app's title bar on the desktops, the system header on phones. Settings → Work mode
+  changes it later (Client, Control, Custom with a switch per role, the last one on disabled) and says that hiding
+  stops nothing.
 - **Desktops and web:** a sidebar (`sidebar` tokens, about 240 pt) with the target switcher on top and the sections
   below; the main pane shows the selection. Windows narrower than about 640 pt collapse to a single column with a
   `NavStack`, as on phones. Each pane owns its scrolling; the sidebar and the page header stay put. On a server the web
@@ -527,9 +536,11 @@ open the Peer drawer. On phones the figures stack in a wrapping line under the h
 
 ### Target Switcher (signature)
 One control at the top of the shell: the current target's name, its kind as a neutral chip ("This device", "Server",
-"Hosted" / "本机"、"服务器"、"托管") and its Status Lamp; opening it lists every target with lamp and kind, plus "Add
-server" and, on the desktops, "Host a control plane". On the desktops and web it is a 36 pt sidebar row with a `Menu`;
-on phones the header's title opens a sheet. Signing out or removing a target asks first and names it.
+"Hosted" / "本机"、"服务器"、"托管") and its Status Lamp; opening it lists every target the work mode serves with lamp
+and kind, plus "Add server" while the console is listed and, on the desktops, "Host a control plane" while the host
+is. In client mode it has one target and is a plain row: no chevron, no menu. On the desktops and web it is a 36 pt
+sidebar row with a `Menu`; on phones the header's title opens a sheet. Signing out or removing a target asks first and
+names it.
 
 ### Capability Notice
 Where this platform cannot run a feature locally, the page still exists: a `primary-muted` callout states what this

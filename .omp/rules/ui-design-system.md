@@ -25,7 +25,7 @@ Read before any UI change: `PRODUCT.md` (who, what job), `DESIGN.md` (tokens and
 - **Flat at rest**: cards and lists have no shadow; one shadow recipe for the popup family.
 - **Scale, not literals**: 4-point spacing steps, the type scale, `radius` / `radius-control`; touch targets at least 44 × 44 pt.
 - **Native chrome**: the system header, back gesture and alerts on iOS / Android (`NavStack`, `AlertDialog`), a sidebar shell on the desktops and web, the page's `header` slot on desktop and web.
-- **Same pages everywhere**: one page per feature for every platform, organized by role (Node, Console, Host) under the Target Switcher; capability comes from `core`, never from `cfg!` in a page; a feature this platform cannot run locally shows a Capability Notice, never disappears.
+- **Same pages everywhere**: one page per feature for every platform, organized by role (Node, Console, Host) under the Target Switcher; capability comes from `core`, never from `cfg!` in a page; a feature this platform cannot run locally shows a Capability Notice, never disappears. Only the user's work mode (`Store::roles`) decides which roles the shell lists, never the platform.
 - **Motion** only to explain a change (150 ms state, 200 ms overlay); `reduce_motion()` turns it into an instant change; the connecting pulse stops too.
 
 ## Copy and languages

@@ -1,5 +1,6 @@
-//! Settings: the UI's language, the EasyTier programs, and the app's version, as grouped panels with an icon each.
-//! Language and About sit side by side on a wide window and stack on a narrow one; the EasyTier panel spans the page.
+//! Settings: the work mode, the UI's language, the EasyTier programs, and the app's version, as grouped panels with
+//! an icon each. The top row's panels sit side by side on a wide window and stack on a narrow one; the EasyTier panel
+//! spans the page.
 
 mod adopt;
 mod installed;
@@ -11,9 +12,11 @@ use nsh_core::prelude::*;
 
 use crate::{
     components::{
-        ButtonKind, ICON_SIZE, Icon, action_button, choice_row, group, icon, machine_text,
+        ButtonKind, ICON_SIZE, Icon, action_button, card, choice_row, group, icon, machine_text,
+        meta_text, switch_row,
     },
-    i18n::{Language, LanguageChoice},
+    core::role::{Role, WorkMode},
+    i18n::{Language, LanguageChoice, Pick},
     store::{Page, Store},
 };
 
@@ -53,6 +56,16 @@ pub fn settings(store: Store) -> View {
                 .flex_wrap()
                 .items_start()
                 .gap_6()
+                .child(
+                    view()
+                        .flex_1()
+                        .min_w(Points(PANEL_MIN_WIDTH))
+                        .child(section(
+                            Icon::Settings,
+                            store.tr(|s| s.settings_mode),
+                            work_mode(store),
+                        )),
+                )
                 .child(
                     view()
                         .flex_1()
@@ -102,6 +115,79 @@ pub(super) fn section(
     view().gap_3().child(heading(glyph, label)).child(body)
 }
 
+/// The work mode: the two presets or the user's own roles, what the choice shows, and that hiding stops nothing.
+fn work_mode(store: Store) -> View {
+    let custom = move || matches!(store.mode(), Some(WorkMode::Custom(_)));
+    let rows: Vec<_> = WorkMode::PRESETS
+        .into_iter()
+        .enumerate()
+        .map(|(index, mode)| {
+            let label: Pick = match mode {
+                WorkMode::Control => |s| s.mode_control,
+                WorkMode::Client | WorkMode::Custom(_) => |s| s.mode_client,
+            };
+            choice_row(
+                store.tr(label),
+                move || store.mode() == Some(mode),
+                index > 0,
+                move || store.set_mode(mode),
+            )
+        })
+        .chain(std::iter::once(choice_row(
+            store.tr(|s| s.mode_custom),
+            custom,
+            true,
+            move || {
+                if !custom() {
+                    store.set_mode(WorkMode::Custom(store.roles()));
+                }
+            },
+        )))
+        .collect();
+    let summary = move || {
+        let strings = store.strings();
+        match store.mode() {
+            Some(WorkMode::Control) => strings.mode_control_body,
+            Some(WorkMode::Custom(_)) => strings.mode_custom_body,
+            Some(WorkMode::Client) | None => strings.mode_client_body,
+        }
+    };
+    view()
+        .gap_3()
+        .child(
+            group()
+                .role(AccessibilityRole::Radiogroup)
+                .label(store.tr(|s| s.settings_mode))
+                .child(rows),
+        )
+        .child(meta_text(summary))
+        .child(when(custom, move || custom_roles(store)))
+        .child(meta_text(store.tr(|s| s.mode_hidden_note)))
+}
+
+/// The custom mode's roles, a switch each; the last one on cannot be turned off.
+fn custom_roles(store: Store) -> View {
+    let rows: Vec<_> = Role::ALL
+        .into_iter()
+        .map(|role| {
+            let (label, body, key): (Pick, Pick, &str) = match role {
+                Role::Node => (|s| s.role_node, |s| s.role_node_body, "node"),
+                Role::Console => (|s| s.role_console, |s| s.role_console_body, "console"),
+                Role::Host => (|s| s.role_host, |s| s.role_host_body, "host"),
+            };
+            let on = move || store.roles().contains(role);
+            switch_row(store.tr(label), on, move |next| {
+                if let Some(roles) = store.roles().with(role, next) {
+                    store.set_mode(WorkMode::Custom(roles));
+                }
+            })
+            .description(store.tr(body))
+            .disabled(move || on() && store.roles().with(role, false).is_none())
+            .test_id(format!("mode-role-{key}"))
+        })
+        .collect();
+    card().child(rows)
+}
 /// The language choices, one checked.
 fn languages(store: Store) -> View {
     let rows: Vec<_> = LanguageChoice::ALL

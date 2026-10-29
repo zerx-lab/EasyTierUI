@@ -5,8 +5,10 @@ mod console;
 mod host;
 mod node;
 mod settings;
+mod welcome;
 
 use nsh_core::prelude::*;
+pub use welcome::welcome;
 
 use crate::{
     components::capability_notice,

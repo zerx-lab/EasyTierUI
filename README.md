@@ -6,7 +6,8 @@ A client for [EasyTier](https://github.com/EasyTier/EasyTier) on macOS, Windows,
 in Rust on Native Shell: its UI is `src/lib.rs`, and `nsh.json` names the root component (`"root": "App"`).
 
 What it does, by role (the same pages on every platform; where a platform cannot do something locally, the page says so
-and offers the remote alternative):
+and offers the remote alternative). The first run asks whether this is a client (node only) or a control end (every
+role); Settings changes it or picks roles one by one:
 
 - **Node** — this device in a mesh: create / join / import (TOML, share link, QR image) / export / edit / delete
   network profiles; start and stop them; node info, peers (direct or relayed, latency, loss, traffic), redacted logs;

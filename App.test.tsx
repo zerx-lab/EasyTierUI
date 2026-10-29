@@ -3,8 +3,10 @@
 // (`nsh.json` "root"), as a phone.
 import { expect, open, test } from "nsh/test";
 
-test("a phone opens a page from the home list and goes back", async () => {
+test("a phone picks the client mode, opens a page and goes back", async () => {
   const app = await open(".");
+  expect(app.texts()).toContain("How will you use EasyTierUI?");
+  await app.press("Continue");
   expect(app.texts()).toContain("This device");
   await app.press("id:page-peers");
   expect(app.texts()).toContain("No network is running");

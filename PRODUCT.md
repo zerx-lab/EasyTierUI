@@ -35,6 +35,11 @@ combines:
 Where a platform physically cannot do something locally (a browser cannot join a mesh, a phone cannot host a server),
 the same page acts on a remote target and says so.
 
+Most installations are one end of a network, so the first run asks one question (confirmed): **client** (the node
+only, preselected) or **control** (every role). Settings switches between them or picks roles one by one
+(**custom**). The mode only decides what the shell lists: hiding a role stops nothing, and a hidden role that still
+runs something here stays one row away. The web build is a control plane's dashboard and starts in control mode.
+
 Success means: a first-time user is connected with safe defaults in about a minute; a control plane can be stood up
 without leaving default accounts or open APIs behind; no setting silently exposes the user's machine or network
 (management ports, default accounts, exit node, subnet proxy, listeners, weak secrets); what the app shows is what

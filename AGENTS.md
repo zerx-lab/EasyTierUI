@@ -56,8 +56,8 @@ crates/easytier-mobile/  The UniFFI bridge: the only crate that links EasyTier's
 src/deploy/           Server deployment artifacts: Docker Compose / systemd / reverse proxy / firewall / README, rendered
                       from a validated DeploymentPlan
 src/profile/          Network profiles: model, validation, TOML rendering, import / share links / QR, persistence
-src/store/            App state: the root Store (targets, pages, language) and one sub-store per role (node, console,
-                      host, versions); pages read signals and call functions; per-target state
+src/store/            App state: the root Store (targets, pages, language, work mode) and one sub-store per role (node,
+                      console, host, versions); pages read signals and call functions; per-target state
 src/shell/            The root's layout: the custom desktop title bar, sidebar (wide) or NavStack (compact), target switcher
 src/pages/            One module per role (node/, console/, host/) and settings.rs; the same pages on every platform
 src/components/       The app's styled components, built on nsh-base and theme tokens
@@ -123,7 +123,12 @@ easytier-web --db <tmp>/et.db --api-server-addr 127.0.0.1   # a throwaway local 
 - **One client, every platform, every feature** (the user's decision): the same pages everywhere, organized by role —
   node, console, control-plane host — and by target (this device, a console server, the hosted control plane). Roles
   combine; switching role or target never loses another role's state. Platform limits are capabilities `core`
-  reports, and the page shows the remote alternative instead of hiding the feature:
+  reports, and the page shows the remote alternative instead of hiding the feature. Which roles the shell lists is the
+  user's **work mode** (the user's decision, `core::role::WorkMode`, storage key `ui.mode`): asked once on the first
+  run of a desktop or phone — *client* (node only, preselected) or *control* (every role) — and changed in Settings,
+  which adds *custom* (a switch per role, one always on); the web build is a control plane's dashboard and never
+  asks. Hiding a role stops and forgets nothing, and a hidden role that still runs something here (this device's
+  networks, the hosted easytier-web) keeps a sidebar row to its pages:
 
   | | Node | Console | Control-plane host |
   |---|---|---|---|

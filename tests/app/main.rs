@@ -10,6 +10,8 @@ mod console;
 #[cfg(test)]
 mod host;
 #[cfg(test)]
+mod mode;
+#[cfg(test)]
 mod node;
 #[cfg(test)]
 mod remote;
@@ -30,6 +32,9 @@ use nsh_engine::{
     EngineConfig, Idiom, Locale, Os, Points, Root, Size, StorageBackend, StorageChange,
 };
 use nsh_testing::Headless;
+
+/// The storage key of the work mode (`store::MODE_KEY`).
+const WORK_MODE_KEY: &str = "ui.mode";
 
 /// Where and how a test runs the app.
 #[derive(Clone)]
@@ -72,6 +77,13 @@ impl Device {
         Self { locale, ..self }
     }
 
+    /// The device as the app finds it on its very first run: no work mode chosen yet.
+    pub fn first_run(self) -> Self {
+        self.storage
+            .write(StorageChange::Remove(WORK_MODE_KEY.to_owned()));
+        self
+    }
+
     /// Starts the app on this device, with `theme.json`, once it has rendered.
     pub fn start(&self) -> Result<Headless, String> {
         let theme = nsh_base::Theme::from_json(include_str!("../../theme.json"))
@@ -99,13 +111,15 @@ impl Device {
 pub struct MemoryStorage(Mutex<BTreeMap<String, String>>);
 
 impl MemoryStorage {
-    /// Storage that keeps the app's secrets in memory (never the developer's keychain) and its files in a
-    /// temporary directory of this test process.
+    /// Storage that keeps the app's secrets in memory (never the developer's keychain), its files in a temporary
+    /// directory of this test process, and the control work mode chosen, so every role's pages are listed (tests of
+    /// the first run start from [`Device::first_run`]).
     pub fn for_tests() -> Arc<Self> {
         let data_dir =
             std::env::temp_dir().join(format!("easytierui-tests-{}", std::process::id()));
         let entries = BTreeMap::from([
             ("test.secret-store".to_owned(), "memory".to_owned()),
+            (WORK_MODE_KEY.to_owned(), "control".to_owned()),
             (
                 "test.data-dir".to_owned(),
                 data_dir.to_string_lossy().into_owned(),
