@@ -27,6 +27,15 @@ pub(super) static STRINGS: Strings = Strings {
     target_this_server: "本服务器",
     status_stopped: "未运行",
     status_not_connected: "未连接",
+    target_hosted: "托管的控制平面",
+    target_add_server: "添加服务器…",
+    target_host_here: "托管控制平面…",
+    kind_this_device: "本机",
+    kind_server: "服务器",
+    kind_hosted: "托管",
+    kind_network: "网络",
+    kind_machine: "机器",
+    kind_peer: "对等节点",
 
     notice_browser_node: "浏览器无法加入组网。",
     notice_browser_node_action: "管理本服务器的节点",
@@ -56,4 +65,10 @@ pub(super) static STRINGS: Strings = Strings {
     language_en: "English",
     settings_about: "关于",
     settings_version: "版本",
+
+    common: &super::common::ZH_CN,
+    node: &super::node::ZH_CN,
+    console: &super::console::ZH_CN,
+    host: &super::host::ZH_CN,
+    versions: &super::versions::ZH_CN,
 };

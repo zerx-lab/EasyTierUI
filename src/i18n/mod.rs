@@ -3,8 +3,19 @@
 //! [`Strings`] has one field per string, so a language without a string does not compile. Write each language
 //! natively; EasyTier's terms stay consistent (network 网络, node 节点, peer 对等节点, core 内核, control plane 控制平面).
 
+mod common;
+mod console;
 mod en;
+mod host;
+pub mod node;
+mod versions;
 mod zh_cn;
+
+pub use common::CommonStrings;
+pub use console::ConsoleStrings;
+pub use host::HostStrings;
+pub use node::NodeStrings;
+pub use versions::VersionStrings;
 
 /// A language the UI is written in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,6 +139,24 @@ pub struct Strings {
     pub status_stopped: &'static str,
     /// Target state: not connected yet.
     pub status_not_connected: &'static str,
+    /// The name of the easytier-web this desktop hosts, as a target.
+    pub target_hosted: &'static str,
+    /// The switcher's action that adds an easytier-web server.
+    pub target_add_server: &'static str,
+    /// The switcher's action that opens hosting a control plane on this desktop.
+    pub target_host_here: &'static str,
+    /// Kind chip: the target is this device.
+    pub kind_this_device: &'static str,
+    /// Kind chip: the target is an easytier-web server.
+    pub kind_server: &'static str,
+    /// Kind chip: the target is the control plane this desktop hosts.
+    pub kind_hosted: &'static str,
+    /// Kind chip of a drawer: a network.
+    pub kind_network: &'static str,
+    /// Kind chip of a drawer: a machine reported by a server.
+    pub kind_machine: &'static str,
+    /// Kind chip of a drawer: a peer of a running network.
+    pub kind_peer: &'static str,
 
     /// Capability notice: a browser cannot be a node.
     pub notice_browser_node: &'static str,
@@ -183,6 +212,45 @@ pub struct Strings {
     pub settings_about: &'static str,
     /// The app's version, a label before the number.
     pub settings_version: &'static str,
+
+    /// Words every area shares.
+    pub common: &'static CommonStrings,
+    /// The node role's strings.
+    pub node: &'static NodeStrings,
+    /// The console role's strings.
+    pub console: &'static ConsoleStrings,
+    /// The control-plane host role's strings (status, hardening, deployment).
+    pub host: &'static HostStrings,
+    /// EasyTier versions on this desktop.
+    pub versions: &'static VersionStrings,
+}
+
+/// `template` with each `{name}` replaced by its value from `args`; unknown placeholders stay as written so a
+/// missing argument shows instead of vanishing.
+pub fn fill(template: &str, args: &[(&str, &str)]) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        let (before, from_brace) = rest.split_at_checked(start).unwrap_or((rest, ""));
+        out.push_str(before);
+        let after_brace = from_brace.get(1..).unwrap_or_default();
+        let Some(end) = after_brace.find('}') else {
+            out.push_str(from_brace);
+            return out;
+        };
+        let name = after_brace.get(..end).unwrap_or_default();
+        match args.iter().find(|(key, _)| *key == name) {
+            Some((_, value)) => out.push_str(value),
+            None => {
+                out.push('{');
+                out.push_str(name);
+                out.push('}');
+            }
+        }
+        rest = after_brace.get(end.saturating_add(1)..).unwrap_or_default();
+    }
+    out.push_str(rest);
+    out
 }
 
 #[cfg(test)]
@@ -218,5 +286,25 @@ mod tests {
             assert_eq!(LanguageChoice::from_key(choice.as_key()), Some(choice));
         }
         assert_eq!(LanguageChoice::from_key("fr"), None);
+    }
+
+    #[test]
+    fn templates_fill_known_placeholders_and_keep_unknown_ones() {
+        assert_eq!(
+            fill("Delete profile “{name}”?", &[("name", "家")]),
+            "Delete profile “家”?"
+        );
+        assert_eq!(fill("{a} and {b}", &[("a", "1")]), "1 and {b}");
+        assert_eq!(fill("no braces", &[]), "no braces");
+        assert_eq!(fill("open {brace", &[]), "open {brace");
+    }
+
+    #[test]
+    fn both_languages_fill_every_shared_word() {
+        for language in [Language::ZhCn, Language::En] {
+            let strings = language.strings();
+            assert!(!strings.common.cancel.is_empty());
+            assert!(strings.common.updated_ago.contains("{age}"));
+        }
     }
 }

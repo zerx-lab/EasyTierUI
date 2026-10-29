@@ -27,6 +27,15 @@ pub(super) static STRINGS: Strings = Strings {
     target_this_server: "This server",
     status_stopped: "Stopped",
     status_not_connected: "Not connected",
+    target_hosted: "Hosted control plane",
+    target_add_server: "Add server…",
+    target_host_here: "Host a control plane…",
+    kind_this_device: "This device",
+    kind_server: "Server",
+    kind_hosted: "Hosted",
+    kind_network: "Network",
+    kind_machine: "Machine",
+    kind_peer: "Peer",
 
     notice_browser_node: "This browser can't join a network.",
     notice_browser_node_action: "Manage this server's nodes",
@@ -61,4 +70,10 @@ pub(super) static STRINGS: Strings = Strings {
     language_en: "English",
     settings_about: "About",
     settings_version: "Version",
+
+    common: &super::common::EN,
+    node: &super::node::EN,
+    console: &super::console::EN,
+    host: &super::host::EN,
+    versions: &super::versions::EN,
 };
