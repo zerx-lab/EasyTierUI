@@ -70,6 +70,9 @@ pub struct NodeStore {
     platform: crate::core::platform::Platform,
     /// This platform runs the node role itself (not the web build).
     local: bool,
+    /// The owner tasks run under: the app's, so a button re-rendered by the change it started, or a closed dialog,
+    /// never cancels the work (a cancelled stop left its network "stopping" forever).
+    owner: Owner,
     /// Goes false when the owner is disposed; tasks that outlive it check it before touching a signal.
     alive: Signal<bool>,
     backend: Stored<Option<Arc<dyn NodeBackend>>>,
@@ -120,6 +123,7 @@ impl NodeStore {
         Self {
             platform: env.platform,
             local,
+            owner: Owner::current(),
             alive: signal(true),
             backend: stored(backend),
             programs: stored(env.programs.clone()),
@@ -355,6 +359,13 @@ impl NodeStore {
         self.alive.try_get().is_some()
     }
 
+    /// Runs `work` as a task under the store's owner.
+    fn go(&self, work: impl Future<Output = ()> + 'static) {
+        self.owner.run(|| {
+            let _task = spawn(work);
+        });
+    }
+
     /// Changes network `id`'s runtime record by `f`; writes (and refreshes the target's lamp) only when it changed.
     fn change(&self, id: &ProfileId, f: impl FnOnce(&mut Runtime)) {
         if !self.alive() {
@@ -448,7 +459,7 @@ impl NodeStore {
         }
         let revision = self.revision_of(&id);
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             let answer = crate::core::work::off_thread(move || backend.poll(&key)).await;
             if !this.alive() {
                 return;
@@ -492,7 +503,7 @@ impl NodeStore {
             return;
         }
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             let answer = crate::core::work::off_thread(move || programs.active()).await;
             if !this.alive() {
                 return;

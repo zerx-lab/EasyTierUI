@@ -1053,6 +1053,19 @@ fn a_running_network_fills_the_summary_and_its_row() {
 }
 
 #[test]
+fn stopping_a_running_network_from_its_row_ends_stopped() {
+    let mut app = answering_core(Device::desktop(Os::MacOs, 1200.0))
+        .start()
+        .unwrap();
+    run_network(&mut app, true);
+    app.press("id:network-stop >> text:Stop").unwrap();
+    // The row's button is re-rendered as the network turns busy; the stop must still finish.
+    app.wait_for_within("id:network-start", Duration::from_secs(10))
+        .unwrap();
+    assert!(!app.shows("Stopping"));
+}
+
+#[test]
 fn the_peers_page_lists_searches_filters_and_opens_a_peer() {
     let mut app = answering_core(Device::desktop(Os::MacOs, 1200.0))
         .start()

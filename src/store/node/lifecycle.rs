@@ -3,7 +3,7 @@
 //! Each action marks the network busy at a new revision, runs against the backend off the engine thread, and applies
 //! its answer only if the revision is still the one it was started at.
 
-use nsh_core::{prelude::*, storage::Storage};
+use nsh_core::storage::Storage;
 
 use super::{Failure, NodeStore, Notice, Op, SaveFailure, Status};
 use crate::{
@@ -178,7 +178,7 @@ impl NodeStore {
         let revision = self.begin_op(&id, Op::Starting);
         let secrets = self.secrets.get();
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             let answer = crate::core::work::off_thread(move || {
                 run_start(backend.as_ref(), secrets.as_ref(), &profile, &machine_id)
             })
@@ -225,7 +225,7 @@ impl NodeStore {
     /// The Stop button.
     pub fn stop(&self, id: ProfileId) {
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             this.stop_task(id).await;
         });
     }
@@ -319,7 +319,7 @@ impl NodeStore {
         let backend = self.backend.get();
         let secrets = self.secrets.get();
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             let removed = {
                 let id = id.clone();
                 crate::core::work::off_thread(move || {
@@ -398,7 +398,7 @@ impl NodeStore {
         };
         profile.tun = false;
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             match this.persist(profile, None, None).await {
                 Ok(()) => this.start_now(id),
                 Err(failure) => {

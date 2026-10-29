@@ -268,7 +268,7 @@ impl NodeStore {
         });
         let secret = draft.secret.clone();
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             match this.persist(profile, Some(secret), None).await {
                 Ok(()) => {
                     if this.alive() {
@@ -369,7 +369,7 @@ impl NodeStore {
         let secrets = self.secrets.get();
         let id = profile.id.clone();
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             let answer = off_thread(move || {
                 let secret = repo::load_secret(secrets.as_ref(), &profile)?;
                 let groups = repo::load_group_secrets(secrets.as_ref(), &profile)?;
@@ -439,7 +439,7 @@ impl NodeStore {
             draft.failure = None;
         });
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             match this.persist(profile, secret, groups).await {
                 Ok(()) => {
                     this.close_detail();
@@ -491,7 +491,7 @@ impl NodeStore {
             view.loading = true;
         });
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             let answer = off_thread(move || backend.logs(&key)).await;
             if !this.alive() {
                 return;
@@ -536,7 +536,7 @@ impl NodeStore {
         let secrets = self.secrets.get();
         let this = *self;
         let for_secret = profile.clone();
-        spawn(async move {
+        self.go(async move {
             let answer = off_thread(move || {
                 let secret = repo::load_secret(secrets.as_ref(), &for_secret)?;
                 let groups = repo::load_group_secrets(secrets.as_ref(), &for_secret)?;
@@ -696,7 +696,7 @@ impl NodeStore {
         });
         let picked = pick_images(PickRequest::new(false, 1));
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             let files = picked.await;
             let Some(file) = files.into_iter().next() else {
                 // Cancelled.
@@ -755,7 +755,7 @@ impl NodeStore {
             draft.save_failure = None;
         });
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             match this.persist(profile, secret, groups).await {
                 Ok(()) => this.close_import(),
                 Err(failure) => this.edit_import(|draft| {
@@ -823,7 +823,7 @@ impl NodeStore {
             draft.failure = None;
         });
         let this = *self;
-        spawn(async move {
+        self.go(async move {
             match this.persist(profile, Some(address), None).await {
                 Ok(()) => {
                     if this.alive() {
