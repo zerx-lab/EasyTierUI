@@ -1,84 +1,50 @@
+<div align="center">
+
 <img src="brand/logo.svg" width="96" height="96" alt="EasyTierUI">
 
 # EasyTierUI
 
-A client for [EasyTier](https://github.com/EasyTier/EasyTier) on macOS, Windows, Linux, iOS, Android and the web, written
-in Rust on Native Shell: its UI is `src/lib.rs`, and `nsh.json` names the root component (`"root": "App"`).
+A native, cross-platform client for the [EasyTier](https://github.com/EasyTier/EasyTier) mesh VPN.
 
-What it does, by role (the same pages on every platform; where a platform cannot do something locally, the page says so
-and offers the remote alternative). The first run asks whether this is a client (node only) or a control end (every
-role); Settings changes it or picks roles one by one:
+macOS · Windows · Linux · iOS · Android · Web
 
-- **Node** — this device in a mesh: create / join / import (TOML, share link, QR image) / export / edit / delete
-  network profiles; start and stop them; node info, peers (direct or relayed, latency, loss, traffic), redacted logs;
-  enroll in a control plane. Desktops run the official `easytier-core` (a TUN network as an OS service after an
-  administrator prompt, a no-TUN network as the app's child); iOS / Android run EasyTier's library in process without
-  TUN (`crates/easytier-mobile`, UniFFI).
-- **Console** — several easytier-web servers: sign in, machines, their networks (create, edit, enable / disable,
-  delete, peers), networks across machines, credentials.
-- **Control-plane host** — run easytier-web on a desktop with first-run hardening (default passwords replaced, API on
-  loopback, registration off); render server deployment files (Docker Compose or systemd, Caddy or nginx, firewall,
-  README) on any platform.
-- **EasyTier releases** (desktops) — list GitHub releases, download, verify the sha256 digest, install side by side,
-  switch, roll back, or use a directory you installed yourself after confirming its version.
-- **Desktop app** (desktops) — a tray icon with Show / Quit, closing the window to the tray so this device's networks
-  keep running, starting quietly (window hidden, tray only), starting at login (a per-user login item), and one running
-  instance per user (a second launch shows the first one's window). Linux needs a StatusNotifierItem tray host (KDE,
-  or GNOME's AppIndicator extension); without one, closing the window quits.
+**English** · [简体中文](README.zh-CN.md)
 
-Prerequisites beyond NSH's: `protoc` on `PATH` for the iOS / Android builds (EasyTier's library compiles protobufs),
-and for Android the NDK that NSH uses.
+</div>
 
-```sh
-nsh run                      # this machine's backend; --target ios, android, web, macos, linux or windows
-nsh check                    # cargo check of the crate, then type checks App.test.tsx
-nsh test                     # cargo test, then App.test.tsx: the root tested from TypeScript, headless; --target to run it on a platform
-nsh test nsh.json --trace    # headless: what the root mounts, and the time of each commit
-nsh package --target web     # or android, macos, linux, windows; the icon is nsh.json's "icon" (brand/icon.png)
-nsh package --target ios --icon brand/icon-ios.png   # iOS needs the opaque full-bleed icon
-```
+## Overview
 
-`nsh run` and `nsh package` mount the root on every platform, the browser included, without QuickJS: the app is Rust
-and native code from start to end (in the browser, with NSH's page script). Rust edits rebuild and restart the app.
+EasyTierUI deploys, configures and runs EasyTier networks quickly, correctly and safely. One Rust app on
+[Native Shell](https://nsh.dev), rendered with each platform's own UI — the same pages and features everywhere,
+organized as switchable roles:
+
+|Role|What it does|
+|---|---|
+|**Node**|Join, create, import (TOML / link / QR) and run networks on this device; peers, traffic and redacted logs|
+|**Console**|Manage machines, networks and credentials across one or more easytier-web servers|
+|**Control-plane host**|Run a hardened easytier-web locally, or render Docker Compose / systemd deployment files|
+
+Desktops run the official `easytier-core` / `easytier-web` binaries as separate processes, downloaded from GitHub
+releases with sha256 verification and switchable / rollback-able versions. Mobile embeds EasyTier's library.
+
+## Security by default
+
+- Encryption on, CSPRNG network secrets, secrets kept in the OS keychain and never in logs or argv
+- RPC portal bound to loopback; risky features (exit node, subnet proxy, SOCKS5, …) off until enabled
+- Hosted easytier-web replaces default passwords and disables registration before leaving loopback
+- Imports are previewed and never auto-started; the UI itself never runs elevated
+
+## Build
+
+Requires Rust (stable) and the `nsh` CLI; `protoc` for iOS / Android.
 
 ```sh
-cargo run
+nsh run                       # run on this machine (--target ios|android|web|macos|linux|windows)
+nsh test                      # cargo test + headless UI tests
+nsh package --target macos    # package (web, android, linux, windows, ios)
 ```
 
-This starts the root directly on the machine's native desktop backend: GTK 4 on Linux, AppKit on macOS, Win32 on
-Windows. Install the backend's development libraries before building.
+## Contributing
 
-The `nsh` commands build the app's runners from the NSH crates `Cargo.toml` depends on: crates.io's at the version of
-the `nsh` you run (keep the `nsh-*` dependencies at that version when you upgrade `nsh`), or an NSH checkout's by path.
-
-## Adding a TSX entry
-
-TSX screens can use the Rust components and modules, with hot reloading for the TSX. The crate's set,
-`#[native_module("easytierui/native")]` in `src/lib.rs`, already exports `App`. Add an `App.tsx`:
-
-```tsx
-import { mount } from "nsh";
-import { App } from "easytierui/native";
-
-mount(App);
-```
-
-then run it with `nsh run App.tsx` (`tsconfig.json` is there for it and the test): a named TSX entry
-runs on QuickJS, while `nsh run` alone keeps running the Rust root. The first `nsh build App.tsx` writes the TypeScript
-declarations of `easytierui/native` into `.nsh/types`. Register more with `registry.register::<…>()` (components),
-`registry.module::<…>()` and `registry.class::<…>()`.
-
-NSH-generated files stay in `.nsh/`: runner sources in `.nsh/rust/` and default packages in `.nsh/out/`.
-Cargo keeps its normal `target/` directory and respects your existing `CARGO_TARGET_DIR`.
-
-## Project rules
-
-- `AGENTS.md`: architecture (one client for every platform with switchable roles — node, console, control-plane host —
-  and EasyTier's programs as separate, freely upgradable components), security, Rust safety (no panics, no `unsafe`),
-  conventions and checks. `CLAUDE.md` imports it.
-- `PRODUCT.md` and `DESIGN.md` (with `.impeccable/design.json`): who the app is for and its design system;
-  `theme.json` holds the design tokens (`nsh.json` `"theme"`).
-- `Cargo.toml` `[lints]` and `clippy.toml`: the panic-free, unsafe-free lint policy;
-  `cargo clippy --all-targets -- -D warnings` must be clean.
-- `.omp/`: agent configuration — `RULES.md`, rules that stop unsafe patterns as they are written (`omp ttsr list`),
-  `/verify`, a guard hook and LSP settings.
+Read [AGENTS.md](AGENTS.md) (architecture and rules), [DESIGN.md](DESIGN.md) and [PRODUCT.md](PRODUCT.md).
+Code is panic-free and `unsafe`-free; `cargo clippy --all-targets -- -D warnings` must be clean.
