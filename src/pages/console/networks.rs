@@ -15,24 +15,25 @@ use super::{
 };
 use crate::{
     components::{
-        ButtonKind, CalloutKind, Columns, Icon, Lamp, MenuAction, action_button, app_color,
-        body_text, busy_button, callout, column, columns, confirm, data_table, empty_panel,
-        machine_text, menu_action, meta_text, more_menu, neutral_chip, search_field, status_chip,
-        summary_cell, summary_strip, table_group_header, table_row,
+        ButtonKind, CalloutKind, Columns, Icon, Lamp, MenuAction, action_button, age_text,
+        app_color, body_text, busy_button, callout, column, columns, confirm, data_table,
+        empty_panel, machine_text, menu_action, meta_text, more_menu, neutral_chip, search_field,
+        status_chip, summary_cell, summary_strip, table_group_header, table_row,
     },
     core::{
         remote::{PeersSummary, RemoteError, ServerNetwork},
         target::TargetId,
     },
     i18n::fill,
-    store::{
-        Page, Store,
-        console::{EditorMode, MachineTab},
-    },
+    store::{Page, Store, console::EditorMode},
 };
 
 /// How often every machine's networks are read again while the page shows.
 const POLL: Duration = Duration::from_secs(15);
+
+/// Failed reads in a row before a machine's networks get a warning: a single one is usually a proxied call that
+/// missed easytier-web's fixed 5 s timeout and heals on the next poll; the row shows its data's age meanwhile.
+const WARN_AFTER_FAILURES: u32 = 2;
 
 /// One network on one machine: what a row shows.
 #[derive(Debug, Clone, PartialEq)]
@@ -290,7 +291,7 @@ fn filtered(groups: Vec<Group>, query: &str) -> Vec<Group> {
         .collect()
 }
 
-/// The machines whose networks could not be read, by hostname.
+/// The machines whose networks could not be read repeatedly (or never), by hostname.
 fn errors_of(store: Store, id: TargetId) -> Vec<(String, RemoteError)> {
     let console = store.console();
     let machines = console.machines(id).value.unwrap_or_default();
@@ -298,8 +299,10 @@ fn errors_of(store: Store, id: TargetId) -> Vec<(String, RemoteError)> {
     machines
         .into_iter()
         .filter_map(|machine| {
-            let error = feeds.get(&machine.id)?.error.clone()?;
-            Some((machine.hostname, error))
+            let feed = feeds.get(&machine.id)?;
+            let error = feed.error.clone()?;
+            let warn = feed.failures >= WARN_AFTER_FAILURES || feed.value.is_none();
+            warn.then_some((machine.hostname, error))
         })
         .collect()
 }
@@ -605,6 +608,14 @@ pub(super) fn network_row(
             }
         })
     };
+    // The last read of this machine failed: the row keeps the older data and says how old it is.
+    let stale_since = move || {
+        console
+            .all_networks(id)
+            .get(&machine)
+            .filter(|feed| feed.error.is_some())
+            .and_then(|feed| feed.read_at_ms)
+    };
     let name_cell = view()
         .flex_row()
         .items_center()
@@ -616,7 +627,18 @@ pub(super) fn network_row(
                 .min_w_0()
                 .font_weight(FontWeight::MEDIUM),
         )
-        .child((!editable).then(|| neutral_chip(tr(store, |c| c.net_read_only))));
+        .child((!editable).then(|| neutral_chip(tr(store, |c| c.net_read_only))))
+        .child(dynamic(move || {
+            stale_since().is_some().then(|| {
+                age_text(
+                    stale_since,
+                    tr(store, |c| c.net_stale),
+                    tr(store, |c| c.net_stale_now),
+                )
+                .number_of_lines(1)
+                .test_id(&format!("network-stale-{instance}"))
+            })
+        }));
     let toggle_label = move || {
         let strings = store.strings().console;
         if item.with(|item| item.network.disabled) {
@@ -720,10 +742,7 @@ pub(super) fn network_row(
     let row = if editable {
         row.on_press(move || console.open_edit(id, machine, instance))
     } else {
-        row.on_press(move || {
-            console.select_machine(id, Some(machine));
-            console.show_machine_tab(id, machine, MachineTab::Networks);
-        })
+        row.on_press(move || console.select_machine(id, Some(machine)))
     };
     row.build()
 }

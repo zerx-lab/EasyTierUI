@@ -546,15 +546,19 @@ names it.
 Where this platform cannot run a feature locally, the page still exists: a `primary-muted` callout states what this
 device cannot do and why in one sentence ("This browser can't join a network." / "浏览器无法加入组网。"), followed by
 the remote alternative as a button ("Manage this server's node", "Deploy a control plane"). Never a disabled page
-without a way forward, never a feature silently missing.
+without a way forward, never a feature silently missing. The web build shows no notice where the serving
+easytier-web's API can do the job: its node pages manage a machine picked on that server, its control-plane Status
+and Hardening pages work through REST and name the items only the deployment files control.
 
 ### Dialogs and Sheets
 Confirmations are the platform's own alert on every platform. A short or multi-step task that needs protected focus
 (create, join, import, enroll, add server) stays a centered dialog on the desktops and the web: panel fill, container
 radius, 24 pt padding, 480 pt wide (640 for config editors), Dialog lift; its body scrolls inside the panel with room
-for focus rings, and on phones it is a full-height page sheet. Anything that is an entity's detail or editing is a
-Drawer (above). Confirmations name the object and the consequence ("Delete profile “home”? Its config and saved
-secret are removed from this device.").
+for focus rings, and on phones it is a full-height page sheet. A desktop or web dialog never slides across the window:
+its scrim and panel fade in together in 200 ms while the panel grows from 96 % and rises 8 pt into place (ease-out),
+and the layer fades out as it last looked; under Reduce Motion it appears and goes at once. Anything that is an
+entity's detail or editing is a Drawer (above). Confirmations name the object and the consequence ("Delete profile
+“home”? Its config and saved secret are removed from this device.").
 
 ### Callouts
 10 % tint of the hue (`primary-muted`, `warning-muted`, `destructive-muted`), container radius, 12×16 pt padding, a hue
@@ -568,7 +572,9 @@ round caps and joins at 1.5 pt whatever the size, 16 pt in buttons, rows and men
 The set: network, peers, server, key, activity, shield, rocket, settings, plus, import, export, download, link, play,
 stop, restart, refresh, more, copy, check, close, search, chevron-down, chevron-right, info, alert-triangle,
 alert-circle, external, terminal, qr, eye, eye-off, trash, edit, globe, lock, arrow-down (received), arrow-up (sent),
-filter. An icon is decoration: the control that holds it has the accessible name.
+filter, monitor (the desktop app). An icon is decoration: the control that holds it has the accessible name. The tray
+icon is not drawn by the app: `brand/tray-template.png` (macOS menu bar, a template the system tints) and
+`brand/tray.png` (Windows and Linux), rendered from `brand/tray-template.svg` and `brand/tray.svg`.
 
 **The Drawn Icon Rule.** Icons are drawn, never typed. A glyph (`i`, `!`, a triangle or tick character, an emoji) is a
 font-dependent stand-in; a missing icon is added to the set with the same stroke, not approximated with text.
@@ -609,6 +615,9 @@ full-height page sheet whose close is back. Anatomy, top to bottom: a header (th
 kind chip such as "Network", the status lamp with its word, the header's own actions such as Start / Stop, a close
 icon button; a hairline below), an optional key-value grid, optional segmented tabs, a scrolling body padded 24 pt on
 every side, and a sticky footer of actions under a hairline. Escape, the backdrop and the close button close it.
+A drawer with more views than a strip holds (the machine's: Networks, Peers, Node, Routes, Relay, Stats, Connections,
+Forwarding, Access, Logs) shows the four used most as the segmented strip and the rest in an inline select beside it
+("More…", which names the view while one of them shows); the two wrap onto two lines on a phone, never overflow.
 
 **The Drawer Rule.** Detail and editing of an entity that lives in a list open in a drawer, not in a centered modal.
 Modals stay for what interrupts or needs protected focus: short confirmations (the platform's alert) and multi-step

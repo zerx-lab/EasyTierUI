@@ -43,24 +43,24 @@ fn the_sidebar_switches_pages_and_marks_the_selected_one() {
 }
 
 #[test]
-fn a_browser_cannot_be_a_node_and_offers_the_servers_nodes() {
+fn a_browser_node_page_manages_the_servers_machines_behind_its_sign_in() {
     let mut app = Device::desktop(Os::Web, 1200.0).start().unwrap();
     // The served page's own server is the target: it opens on its console, which asks to sign in.
     app.wait_for("Sign in to manage this server").unwrap();
     app.press("id:page-networks").unwrap();
-    app.wait_for("This browser can't join a network.").unwrap();
-    app.press("Manage this server's nodes").unwrap();
     app.wait_for("Sign in to manage this server").unwrap();
-    assert!(app.screen().selected("id:page-machines").unwrap());
+    assert!(!app.shows("This browser can't join a network."));
+    assert!(app.screen().selected("id:page-networks").unwrap());
 }
 
 #[test]
-fn a_browser_changes_its_control_plane_through_deployment() {
+fn a_browser_hardens_its_control_plane_behind_the_servers_sign_in() {
     let mut app = Device::desktop(Os::Web, 1200.0).start().unwrap();
     app.press("id:page-hardening").unwrap();
-    app.wait_for("Open deployment").unwrap();
-    app.press("Open deployment").unwrap();
-    app.wait_for("No deployment files yet").unwrap();
+    // The page is the serving easytier-web's own: it asks to sign in, not a notice about running programs.
+    app.wait_for("Sign in to manage this server").unwrap();
+    assert!(!app.shows("Open deployment"));
+    assert!(app.screen().selected("id:page-hardening").unwrap());
 }
 
 #[test]

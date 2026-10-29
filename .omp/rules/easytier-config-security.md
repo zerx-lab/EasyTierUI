@@ -11,14 +11,14 @@ Secrets: `network_secret`, easytier-web passwords and session tokens, `secure_mo
 - Hold them in a `Secret` newtype whose `Debug` / `Display` print `***` and that never derives `Serialize` into anything but the core's config file; compare in constant time where it matters.
 - Never in logs, error messages shown to users, panics, analytics (there is none), URLs other than the config-server one, clipboard without a user action, test fixtures with real values, or committed files. Fixtures use obvious placeholders (`example-secret-do-not-use`).
 - Never on a command line: `--network-secret` and friends are visible in every process list. Write them into the config file instead.
-- At rest: the OS keychain where the platform has one (Keychain, Credential Manager, Secret Service, Android Keystore); the rendered config file that must contain them is written atomically (temp file + rename) with owner-only permissions (`0o600` on Unix, a user-only ACL on Windows) inside the app's data directory and removed when the profile is deleted.
+- At rest: the OS keychain where the platform has one (Keychain, Credential Manager, Secret Service, Android Keystore); a local profile keeps its network secret under `profile/<id>/network-secret` and its ACL group secrets as one entry under `profile/<id>/acl-group-secrets` (the stored profile holds group names only), and deleting the profile deletes both; the rendered config file that must contain them is written atomically (temp file + rename) with owner-only permissions (`0o600` on Unix, a user-only ACL on Windows) inside the app's data directory and removed when the profile is deleted.
 - Generate network secrets with a CSPRNG, at least 128 bits, URL-safe. EasyTier derives the network digest with SipHash, not a password KDF: warn when a user types a short or common secret.
 
 ## Defaults
 
 - Encryption on, `aes-gcm`. `xor` is obfuscation, never labelled as encryption. Disabling encryption or changing the algorithm is an advanced setting with a warning that every peer must match.
 - Listeners only where the user asked; DHCP on by default for joiners; `no_tun` offered when privileges are missing.
-- `enable_exit_node`, `exit_nodes`, `proxy_network` (subnet proxy), `port_forward`, `socks5_proxy`, `proxy_forward_by_system`, `relay_all_peer_rpc`, `private_mode=false` and wide `relay_network_whitelist` change what other peers can reach: each is off by default and explained where it is turned on.
+- `enable_exit_node`, `exit_nodes`, `proxy_network` (subnet proxy), `port_forward`, `socks5_proxy`, `vpn_portal_config` (WireGuard on every interface), `proxy_forward_by_system`, `relay_all_peer_rpc`, `private_mode=false` and wide `relay_network_whitelist` change what other peers can reach: each is off by default and explained where it is turned on.
 - No public shared-node addresses are hard-coded; the user enters or picks one, and the UI says that a shared node relays traffic.
 
 ## The management surfaces

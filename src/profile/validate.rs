@@ -6,10 +6,13 @@ use super::{
     error::ProfileError,
     model::{
         IpMode, MAX_DEV_NAME_CHARS, MAX_HOSTNAME_CHARS, MAX_LIST_ENTRIES, MAX_NAME_CHARS,
-        MTU_RANGE, NetworkProfile, PortForward, RelayWhitelist,
+        MTU_RANGE, NetworkProfile, RelayWhitelist,
     },
 };
-use crate::core::net::{self, NetError};
+use crate::core::{
+    net::{self, NetError},
+    settings::PortForward,
+};
 
 /// The most characters in one relay-whitelist pattern.
 const MAX_PATTERN_CHARS: usize = 64;
@@ -161,13 +164,73 @@ impl NetworkProfile {
                 });
             }
         }
-        check_list(&mut problems, "subnet_proxy", &self.subnet_proxy, |net| {
-            *net
-        });
+        check_list(
+            &mut problems,
+            "subnet_proxy",
+            &self.subnet_proxy,
+            |subnet| subnet.cidr,
+        );
         for (index, subnet) in self.subnet_proxy.iter().enumerate() {
-            if let Err(error) = net::check_ipv4_subnet(&format!("subnet_proxy[{index}]"), *subnet) {
+            let field = format!("subnet_proxy[{index}]");
+            if let Err(error) = net::check_ipv4_subnet(&field, subnet.cidr) {
                 problems.push(error.into());
             }
+            if let Some(mapped) = subnet.mapped {
+                let field = format!("{field}.mapped");
+                if let Err(error) = net::check_ipv4_subnet(&field, mapped) {
+                    problems.push(error.into());
+                } else if mapped.prefix_len() != subnet.cidr.prefix_len() {
+                    problems.push(ProfileError::Invalid {
+                        field,
+                        reason: "must be the same size as the shared subnet",
+                    });
+                }
+            }
+        }
+        check_list(
+            &mut problems,
+            "mapped_listeners",
+            &self.mapped_listeners,
+            |listener| listener.as_str().to_owned(),
+        );
+        if self.instance_recv_bps_limit == Some(0) {
+            problems.push(ProfileError::Invalid {
+                field: "instance_recv_bps_limit".to_owned(),
+                reason: "must be more than 0 (leave it unset for no limit)",
+            });
+        }
+        if let Some(routes) = &self.manual_routes {
+            check_list(&mut problems, "routes", routes, |route| *route);
+            for (index, route) in routes.iter().enumerate() {
+                // Any prefix from /0 to /32 is a route, but the address must be the network's own.
+                if route.addr() != route.network() {
+                    problems.push(
+                        NetError::HostBits {
+                            field: format!("routes[{index}]"),
+                        }
+                        .into(),
+                    );
+                }
+            }
+        }
+        if let Some(portal) = self.vpn_portal {
+            if let Err(error) = net::check_ipv4_subnet("vpn_portal.client_cidr", portal.client_cidr)
+            {
+                problems.push(error.into());
+            }
+            if portal.listen_port == 0 {
+                problems.push(
+                    NetError::BadPort {
+                        field: "vpn_portal.listen_port".to_owned(),
+                    }
+                    .into(),
+                );
+            }
+        }
+        if let Some(acl) = &self.acl
+            && let Err(error) = acl.check()
+        {
+            problems.push(ProfileError::Acl(error));
         }
         check_list(&mut problems, "exit_nodes", &self.exit_nodes, |node| *node);
         for (index, node) in self.exit_nodes.iter().enumerate() {
@@ -231,7 +294,13 @@ impl NetworkProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile::model::{ProfileId, Proto, Socks5};
+    use crate::{
+        core::{
+            acl::{Acl, AclChain, ChainKind},
+            settings::{MappedListener, Proto, VpnPortal},
+        },
+        profile::model::{ProfileId, Socks5, SubnetProxy},
+    };
 
     fn profile() -> NetworkProfile {
         NetworkProfile::new(
@@ -289,11 +358,77 @@ mod tests {
         p.ip = IpMode::Static("10.144.144.0/24".parse().unwrap());
         assert_eq!(field_of(&p), "ip");
         let mut p = profile();
-        p.subnet_proxy = vec!["192.168.50.7/24".parse().unwrap()];
+        p.subnet_proxy = vec![SubnetProxy::plain("192.168.50.7/24".parse().unwrap())];
         assert_eq!(field_of(&p), "subnet_proxy[0]");
         let mut p = profile();
         p.exit_nodes = vec!["0.0.0.0".parse().unwrap()];
         assert_eq!(field_of(&p), "exit_nodes[0]");
+    }
+
+    #[test]
+    fn mapped_subnets_routes_portal_limit_and_acl_are_checked() {
+        let subnet = |text: &str| -> SubnetProxy { SubnetProxy::parse_line("s", text).unwrap() };
+        let mut p = profile();
+        p.subnet_proxy = vec![subnet("192.168.50.0/24->10.50.0.0/24")];
+        assert_eq!(p.validate(), Ok(()));
+        p.subnet_proxy = vec![subnet("192.168.50.0/24->10.50.0.0/16")];
+        assert_eq!(field_of(&p), "subnet_proxy[0].mapped");
+        p.subnet_proxy = vec![
+            subnet("192.168.50.0/24"),
+            subnet("192.168.50.0/24->10.1.0.0/24"),
+        ];
+        assert_eq!(field_of(&p), "subnet_proxy[1]");
+
+        let mut p = profile();
+        p.manual_routes = Some(Vec::new());
+        assert_eq!(p.validate(), Ok(()));
+        p.manual_routes = Some(vec![
+            "0.0.0.0/0".parse().unwrap(),
+            "192.168.0.0/16".parse().unwrap(),
+        ]);
+        assert_eq!(p.validate(), Ok(()));
+        p.manual_routes = Some(vec!["192.168.1.5/16".parse().unwrap()]);
+        assert_eq!(field_of(&p), "routes[0]");
+        p.manual_routes = Some(vec!["10.0.0.0/8".parse().unwrap(); 2]);
+        assert_eq!(field_of(&p), "routes[1]");
+
+        let mut p = profile();
+        p.vpn_portal = Some(VpnPortal {
+            client_cidr: "10.14.14.0/24".parse().unwrap(),
+            listen_port: 22022,
+        });
+        assert_eq!(p.validate(), Ok(()));
+        p.vpn_portal = Some(VpnPortal {
+            client_cidr: "10.14.14.7/24".parse().unwrap(),
+            listen_port: 22022,
+        });
+        assert_eq!(field_of(&p), "vpn_portal.client_cidr");
+        p.vpn_portal = Some(VpnPortal {
+            client_cidr: "10.14.14.0/24".parse().unwrap(),
+            listen_port: 0,
+        });
+        assert_eq!(field_of(&p), "vpn_portal.listen_port");
+
+        let mut p = profile();
+        p.instance_recv_bps_limit = Some(1);
+        assert_eq!(p.validate(), Ok(()));
+        p.instance_recv_bps_limit = Some(0);
+        assert_eq!(field_of(&p), "instance_recv_bps_limit");
+
+        let mut p = profile();
+        p.mapped_listeners =
+            vec![MappedListener::parse("m", "tcp://203.0.113.5:11223").unwrap(); 2];
+        assert_eq!(field_of(&p), "mapped_listeners[1]");
+
+        let mut p = profile();
+        p.acl = Some(Acl::default());
+        assert_eq!(p.validate(), Ok(()));
+        p.acl = Some(Acl {
+            chains: vec![AclChain::new(ChainKind::Inbound, "c"); crate::core::acl::MAX_CHAINS + 1],
+            ..Acl::default()
+        });
+        assert!(matches!(p.validate(), Err(ProfileError::Acl(_))));
+        assert_eq!(field_of(&p), "acl");
     }
 
     #[test]

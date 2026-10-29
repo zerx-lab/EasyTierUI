@@ -2,7 +2,7 @@
 //! of a list, and what kind of problem. Converted from the profile module's errors (English, for logs) in one place.
 
 use crate::{
-    core::net::NetError,
+    core::{acl::AclError, net::NetError},
     profile::{ImportError, ProfileError, ShareError},
 };
 
@@ -35,6 +35,18 @@ pub enum Field {
     Socks5,
     /// Port forwards.
     PortForwards,
+    /// The instance's receive rate limit.
+    RecvLimit,
+    /// Mapped listeners.
+    MappedListeners,
+    /// Manual routes.
+    Routes,
+    /// The VPN portal's client network.
+    VpnPortalCidr,
+    /// The VPN portal's WireGuard port.
+    VpnPortalPort,
+    /// The access-control section (the editor of it shows the details).
+    Acl,
     /// The relay whitelist.
     RelayWhitelist,
     /// The control-plane address of a managed network.
@@ -48,6 +60,15 @@ pub enum Field {
 impl Field {
     /// The field a profile error's name (`peers[2]`, `port_forwards[0].bind`, `network_name`) belongs to.
     pub fn of(name: &str) -> Self {
+        match name {
+            "vpn_portal.client_cidr" | "vpn_portal_config.client_cidr" => {
+                return Self::VpnPortalCidr;
+            }
+            "vpn_portal.listen_port" | "vpn_portal_config.wireguard_listen" => {
+                return Self::VpnPortalPort;
+            }
+            _ => {}
+        }
         let base = name.split(['[', '.']).next().unwrap_or(name);
         match base {
             "name" => Self::Name,
@@ -62,6 +83,10 @@ impl Field {
             "exit_nodes" => Self::ExitNodes,
             "socks5" | "socks5_proxy" => Self::Socks5,
             "port_forwards" | "port_forward" => Self::PortForwards,
+            "instance_recv_bps_limit" => Self::RecvLimit,
+            "mapped_listeners" => Self::MappedListeners,
+            "routes" => Self::Routes,
+            "acl" => Self::Acl,
             "relay_whitelist" | "relay_network_whitelist" => Self::RelayWhitelist,
             "config server" => Self::ConfigServer,
             _ => Self::Other,
@@ -132,6 +157,12 @@ pub enum ProblemKind {
     ForwardShape,
     /// The control-plane address is not `udp://host:port/account`.
     ConfigServerShape,
+    /// A mapped subnet that is not the same size as the subnet it stands for.
+    MappedSize,
+    /// A number that must be more than 0.
+    MustBePositive,
+    /// The access-control section is not valid; says where.
+    Acl(AclError),
     /// Something else is wrong; the log has details.
     Other,
 }
@@ -222,11 +253,16 @@ impl From<&ProfileError> for FieldProblem {
                     ProblemKind::NoSpaces
                 } else if reason.contains("letters") {
                     ProblemKind::NameChars
+                } else if reason.contains("same size") {
+                    ProblemKind::MappedSize
+                } else if reason.contains("more than 0") || reason.contains("positive") {
+                    ProblemKind::MustBePositive
                 } else {
                     ProblemKind::Other
                 }
             }
             ProfileError::Net(net) => return Self::from(net),
+            ProfileError::Acl(acl) => ProblemKind::Acl(*acl),
             ProfileError::BadConfigServer => ProblemKind::ConfigServerShape,
             ProfileError::BadId
             | ProfileError::BadMachineId

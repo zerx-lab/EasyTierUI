@@ -1,7 +1,7 @@
 //! Why a profile is not valid or cannot be turned into a launch. Every variant names the field; none repeats a value
 //! that could be a secret.
 
-use crate::core::net::NetError;
+use crate::core::{acl::AclError, net::NetError};
 
 /// A problem with a profile, found while validating, rendering or launching it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -61,6 +61,9 @@ pub enum ProfileError {
     /// An address, URL, CIDR or port; the inner error names the field.
     #[error(transparent)]
     Net(#[from] NetError),
+    /// The access-control section is not valid; the inner error says where in it.
+    #[error("{0}")]
+    Acl(AclError),
     /// A profile id that is not 32 lowercase hexadecimal characters.
     #[error("id: not a valid profile id")]
     BadId,
@@ -93,6 +96,7 @@ impl ProfileError {
             | Self::OutOfRange { field, .. }
             | Self::Invalid { field, .. } => Some(field),
             Self::Net(error) => Some(error.field()),
+            Self::Acl(_) => Some("acl"),
             Self::BadId => Some("id"),
             Self::BadMachineId => Some("machine id"),
             Self::BadConfigServer => Some("config server"),

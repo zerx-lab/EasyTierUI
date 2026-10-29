@@ -10,17 +10,19 @@ pub mod model;
 pub mod render;
 pub mod repo;
 pub mod share;
+#[cfg(test)]
+pub(crate) mod testing;
 mod validate;
 
 pub use error::ProfileError;
 pub use import::{
-    ImportError, ImportPreview, Imported, PreviewForward, PreviewListener, PreviewSocks5,
-    import_toml, import_toml_with_id,
+    ImportError, ImportPreview, Imported, PreviewAcl, PreviewForward, PreviewListener,
+    PreviewSocks5, import_toml, import_toml_with_id,
 };
 pub use model::{
     ConfigSource, DEFAULT_MTU, Encryption, Exposure, IpMode, MAX_DEV_NAME_CHARS,
-    MAX_HOSTNAME_CHARS, MAX_LIST_ENTRIES, MAX_NAME_CHARS, MTU_RANGE, NetworkProfile, PortForward,
-    ProfileId, Proto, RelayWhitelist, Socks5, clean_name,
+    MAX_HOSTNAME_CHARS, MAX_LIST_ENTRIES, MAX_NAME_CHARS, MTU_RANGE, NetworkProfile, ProfileId,
+    RelayWhitelist, Socks5, SubnetProxy, clean_name, parse_route,
 };
 pub use render::check_config_server;
 pub use repo::{KeyValue, LoadedProfiles, MemoryKv, NshStorage, RepoError};

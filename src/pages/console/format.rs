@@ -129,6 +129,7 @@ pub(super) fn remote_error_text(strings: &'static Strings, error: &RemoteError) 
             fill(c.err_rejected, &[("message", message.as_str())])
         }
         RemoteError::Timeout => c.err_timeout.to_owned(),
+        RemoteError::MachineNoAnswer(_) => c.err_machine_no_answer.to_owned(),
         RemoteError::Network(message) => fill(c.err_network, &[("message", message.as_str())]),
         RemoteError::Decode(_) => c.err_decode.to_owned(),
         RemoteError::InsecureTransport => c.err_insecure.to_owned(),

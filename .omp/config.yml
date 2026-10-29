@@ -1,3 +1,7 @@
+tools:
+  # write: 自动放行 read/write 层级工具，exec（bash/browser 等）需确认。
+  # 想全自动时改回 yolo，或临时用 `omp --yolo`。
+  approvalMode: yolo
 # Project omp settings for EasyTierUI (committed: every agent session in this
 # repository gets the same rules, hooks and LSP behavior).
 ttsr:

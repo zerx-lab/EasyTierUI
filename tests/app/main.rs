@@ -8,6 +8,8 @@ mod components;
 #[cfg(test)]
 mod console;
 #[cfg(test)]
+mod desktop;
+#[cfg(test)]
 mod host;
 #[cfg(test)]
 mod mode;
@@ -111,14 +113,15 @@ impl Device {
 pub struct MemoryStorage(Mutex<BTreeMap<String, String>>);
 
 impl MemoryStorage {
-    /// Storage that keeps the app's secrets in memory (never the developer's keychain), its files in a temporary
-    /// directory of this test process, and the control work mode chosen, so every role's pages are listed (tests of
-    /// the first run start from [`Device::first_run`]).
+    /// Storage that keeps the app's secrets in memory (never the developer's keychain), its login item in memory
+    /// (never the developer's login items), its files in a temporary directory of this test process, and the control
+    /// work mode chosen, so every role's pages are listed (tests of the first run start from [`Device::first_run`]).
     pub fn for_tests() -> Arc<Self> {
         let data_dir =
             std::env::temp_dir().join(format!("easytierui-tests-{}", std::process::id()));
         let entries = BTreeMap::from([
             ("test.secret-store".to_owned(), "memory".to_owned()),
+            ("test.login-item".to_owned(), "memory".to_owned()),
             (WORK_MODE_KEY.to_owned(), "control".to_owned()),
             (
                 "test.data-dir".to_owned(),

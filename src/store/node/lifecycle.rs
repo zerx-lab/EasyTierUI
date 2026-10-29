@@ -8,6 +8,7 @@ use nsh_core::{prelude::*, storage::Storage};
 use super::{Failure, NodeStore, Notice, Op, SaveFailure, Status};
 use crate::{
     core::{
+        acl::GroupSecrets,
         keychain::SecretStore,
         node::{NodeBackend, NodeError, Privilege},
         state::{FailReason, NetworkState},
@@ -62,8 +63,14 @@ fn try_start(
         Ok(None) => return Err(Failure::SecretMissing),
         Err(error) => return Err(Failure::Core(FailReason::Other(error.to_string()))),
     };
+    let groups = if profile.is_managed() {
+        GroupSecrets::default()
+    } else {
+        repo::load_group_secrets(secrets, profile)
+            .map_err(|error| Failure::Core(FailReason::Other(error.to_string())))?
+    };
     let launch = profile
-        .launch(&secret, machine_id)
+        .launch(&secret, &groups, machine_id)
         .map_err(|error| Failure::Core(FailReason::ConfigRejected(error.to_string())))?;
     // An installed OS service cannot be started as the user's child: switching from TUN to no TUN removes it first.
     if launch.privilege == Privilege::User && backend.service_installed(&launch.key) {
@@ -84,7 +91,12 @@ fn run_remove(
             .remove(&key)
             .map_err(|error| SaveFailure::Remove(error.to_string()))?;
     }
-    for account in [id.network_secret_account(), id.config_server_account()] {
+    let accounts = [
+        id.network_secret_account(),
+        id.config_server_account(),
+        id.acl_group_secrets_account(),
+    ];
+    for account in accounts {
         secrets.delete(&account).map_err(|error| {
             log::warn!("the keychain would not forget {account}: {error}");
             SaveFailure::Keychain
@@ -387,7 +399,7 @@ impl NodeStore {
         profile.tun = false;
         let this = *self;
         spawn(async move {
-            match this.persist(profile, None).await {
+            match this.persist(profile, None, None).await {
                 Ok(()) => this.start_now(id),
                 Err(failure) => {
                     if this.alive() {

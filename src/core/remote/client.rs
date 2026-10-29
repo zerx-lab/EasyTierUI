@@ -29,6 +29,12 @@ use super::{
         Credential, Machine, MachineNetworks, NetworkMeta, NetworkRuntime, NewCredential,
         PeerLinks, PeersSummary, ServerNetwork, ServerSession, ServerSummary,
     },
+    patch::ConfigPatch,
+    rpc_model::{
+        AclStats, Connector, ForeignNetwork, ForeignNetworkHost, ForeignNetworkSummary, LogLevel,
+        Metric, NodeFacts, PeerMapNode, PortForwardEntry, PublicIpv6Info, RouteEntry,
+        VpnPortalInfo, Whitelist,
+    },
     wire,
 };
 use crate::core::{secret::Secret, state::RouteKind};
@@ -282,6 +288,7 @@ impl RemoteClient {
                 Err(
                     error @ (RemoteError::Unauthorized
                     | RemoteError::NotFound(_)
+                    | RemoteError::MachineNoAnswer(_)
                     | RemoteError::Timeout
                     | RemoteError::Network(_)),
                 ) => return Err(error),
@@ -486,6 +493,271 @@ impl RemoteClient {
             .call(api::revoke_credential(machine, instance, credential_id))
             .await?;
         wire::parse_revoked(&body)
+    }
+
+    // --- More services of the machine's core, through proxy-rpc ---------------------------------------------
+    //
+    // Every call below fails like `list_peers`: [`RemoteError::Rejected`] (status 500, `RPC Error`) when the core
+    // has no such instance, [`RemoteError::MachineNoAnswer`] when the core is silent or gone, plus the errors of
+    // every call.
+
+    /// The node's own facts: ids, version, virtual IP, listeners, STUN result, interface addresses, features. The
+    /// reply also carries the node's rendered config with the network secret; it is not read.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn node_info(&self, machine: Uuid, instance: Uuid) -> Result<NodeFacts, RemoteError> {
+        wire::parse_node_facts(&self.call(api::show_node_info(machine, instance)).await?)
+    }
+
+    /// The routing table: every node of the network with its hops, latency and next hop.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn list_routes(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<Vec<RouteEntry>, RemoteError> {
+        wire::parse_routes(&self.call(api::list_routes(machine, instance)).await?)
+    }
+
+    /// The networks this node relays without being a member, with their peers and links.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn list_foreign_networks(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<Vec<ForeignNetwork>, RemoteError> {
+        wire::parse_foreign_networks(
+            &self
+                .call(api::list_foreign_networks(machine, instance))
+                .await?,
+        )
+    }
+
+    /// The foreign networks relayed anywhere in the mesh, by relaying node.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn list_global_foreign_networks(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<Vec<ForeignNetworkHost>, RemoteError> {
+        wire::parse_global_foreign_networks(
+            &self
+                .call(api::list_global_foreign_networks(machine, instance))
+                .await?,
+        )
+    }
+
+    /// How many foreign networks and peers each node of the mesh relays.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn foreign_network_summary(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<Vec<ForeignNetworkSummary>, RemoteError> {
+        wire::parse_foreign_network_summary(
+            &self
+                .call(api::foreign_network_summary(machine, instance))
+                .await?,
+        )
+    }
+
+    /// The public IPv6 prefix this node leases from and the leases it handed out.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn list_public_ipv6(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<PublicIpv6Info, RemoteError> {
+        wire::parse_public_ipv6(&self.call(api::list_public_ipv6(machine, instance)).await?)
+    }
+
+    /// The mesh's direct links with their latency, as the peer center collected them. It names no instance: the
+    /// core's only (or first) network answers.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn global_peer_map(&self, machine: Uuid) -> Result<Vec<PeerMapNode>, RemoteError> {
+        wire::parse_global_peer_map(&self.call(api::global_peer_map(machine)).await?)
+    }
+
+    /// The manual connectors with their link status.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn list_connectors(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<Vec<Connector>, RemoteError> {
+        wire::parse_connectors(&self.call(api::list_connectors(machine, instance)).await?)
+    }
+
+    /// The mapped listeners' urls.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn list_mapped_listeners(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<Vec<String>, RemoteError> {
+        wire::parse_mapped_listeners(
+            &self
+                .call(api::list_mapped_listeners(machine, instance))
+                .await?,
+        )
+    }
+
+    /// The VPN portal and its connected clients. Its `client_config` holds a WireGuard private key
+    /// ([`Secret`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn vpn_portal_info(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<VpnPortalInfo, RemoteError> {
+        wire::parse_vpn_portal(&self.call(api::vpn_portal_info(machine, instance)).await?)
+    }
+
+    /// The ACL's rule hit counts, tracked connections and global counters.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn acl_stats(&self, machine: Uuid, instance: Uuid) -> Result<AclStats, RemoteError> {
+        wire::parse_acl_stats(&self.call(api::acl_stats(machine, instance)).await?)
+    }
+
+    /// The TCP and UDP ports open to the mesh.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn whitelist(&self, machine: Uuid, instance: Uuid) -> Result<Whitelist, RemoteError> {
+        wire::parse_whitelist(&self.call(api::whitelist(machine, instance)).await?)
+    }
+
+    /// The port forwards of the running instance.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn list_port_forwards(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<Vec<PortForwardEntry>, RemoteError> {
+        wire::parse_port_forwards(
+            &self
+                .call(api::list_port_forwards(machine, instance))
+                .await?,
+        )
+    }
+
+    /// The core's metrics (counters with labels).
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn stats(&self, machine: Uuid, instance: Uuid) -> Result<Vec<Metric>, RemoteError> {
+        wire::parse_stats(&self.call(api::stats(machine, instance)).await?)
+    }
+
+    /// The same metrics as Prometheus exposition text.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn prometheus_stats(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<String, RemoteError> {
+        wire::parse_prometheus(&self.call(api::prometheus_stats(machine, instance)).await?)
+    }
+
+    /// The core process's log level. It is process-wide: every instance of the machine's core shares it.
+    ///
+    /// # Errors
+    ///
+    /// [`RemoteError::Decode`] for a level this app does not know; as [`RemoteClient::list_peers`] otherwise.
+    pub async fn logger_level(&self, machine: Uuid) -> Result<LogLevel, RemoteError> {
+        wire::parse_log_level(&self.call(api::get_logger_config(machine)).await?)
+    }
+
+    /// Sets the core process's log level, for every instance of the machine's core, until the core restarts.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn set_logger_level(
+        &self,
+        machine: Uuid,
+        level: LogLevel,
+    ) -> Result<(), RemoteError> {
+        self.call(api::set_logger_config(machine, level))
+            .await
+            .map(|_| ())
+    }
+
+    /// The instance's running config, asked of the core itself: it shows what [`RemoteClient::patch_config`]
+    /// changed, which the saved config ([`RemoteClient::network_config`]) does not. It includes the network
+    /// secret.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteClient::list_peers`].
+    pub async fn running_config(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+    ) -> Result<NetworkConfigForm, RemoteError> {
+        wire::parse_running_config(&self.call(api::get_config(machine, instance)).await?)
+    }
+
+    /// Applies a [`ConfigPatch`] to the **running** instance: no restart, but also nothing saved. easytier-web
+    /// keeps its own copy of the config and pushes it again when the machine reconnects or restarts, which undoes
+    /// the patch; edit the saved config ([`RemoteClient::update_network_config`]) to keep a change.
+    ///
+    /// # Errors
+    ///
+    /// [`RemoteError::Invalid`] without a request for an empty patch; as [`RemoteClient::list_peers`] otherwise
+    /// (the core answers 500 when it refuses a value, for example a mapped CIDR of another size).
+    pub async fn patch_config(
+        &self,
+        machine: Uuid,
+        instance: Uuid,
+        patch: &ConfigPatch,
+    ) -> Result<(), RemoteError> {
+        if patch.is_empty() {
+            return Err(RemoteError::Invalid("the change is empty".into()));
+        }
+        self.call(api::patch_config(machine, instance, patch))
+            .await
+            .map(|_| ())
     }
 
     // --- Plumbing ---------------------------------------------------------------------------------------

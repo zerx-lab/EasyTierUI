@@ -10,6 +10,7 @@ mod import;
 mod list;
 mod peers;
 mod shared;
+mod web;
 
 pub use detail::DetailStrings;
 pub use flow::FlowStrings;
@@ -17,6 +18,7 @@ pub use import::ImportStrings;
 pub use list::ListStrings;
 pub use peers::PeersStrings;
 pub use shared::SharedStrings;
+pub use web::WebStrings;
 
 /// Strings of this area in one language.
 #[derive(Debug)]
@@ -35,6 +37,8 @@ pub struct NodeStrings {
     pub import: &'static ImportStrings,
     /// The Peers page.
     pub peers: &'static PeersStrings,
+    /// The web build's pages, which manage a machine of the serving server.
+    pub web: &'static WebStrings,
 }
 
 pub(super) static EN: NodeStrings = NodeStrings {
@@ -45,6 +49,7 @@ pub(super) static EN: NodeStrings = NodeStrings {
     detail: &detail::EN,
     import: &import::EN,
     peers: &peers::EN,
+    web: &web::EN,
 };
 
 pub(super) static ZH_CN: NodeStrings = NodeStrings {
@@ -55,4 +60,5 @@ pub(super) static ZH_CN: NodeStrings = NodeStrings {
     detail: &detail::ZH_CN,
     import: &import::ZH_CN,
     peers: &peers::ZH_CN,
+    web: &web::ZH_CN,
 };

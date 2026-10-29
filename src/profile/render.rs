@@ -13,6 +13,7 @@ use super::{
     model::{ConfigSource, Encryption, IpMode, NetworkProfile, RelayWhitelist},
 };
 use crate::core::{
+    acl::{AclConfig, GroupSecrets, wire},
     net::{MAX_URL_LEN, Scheme},
     node::{LaunchSource, NodeLaunch, Privilege},
     secret::Secret,
@@ -30,10 +31,18 @@ struct ConfigFile<'a> {
     ipv4: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     dhcp: Option<bool>,
+    #[serde(skip_serializing_if = "is_false")]
+    ipv6_public_addr_auto: bool,
     // Written even when empty: an absent key makes the core open its default listeners on every interface.
     listeners: Vec<&'a str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    mapped_listeners: Vec<&'a str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     exit_nodes: Vec<String>,
+    // Written even when empty once manual routes are on: an empty list means no routes, an absent key means
+    // EasyTier's own routing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    routes: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     socks5_proxy: Option<String>,
     network_identity: NetworkIdentity<'a>,
@@ -41,9 +50,17 @@ struct ConfigFile<'a> {
     peer: Vec<PeerEntry<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     proxy_network: Vec<ProxyNetworkEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    vpn_portal_config: Option<VpnPortalEntry>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     port_forward: Vec<PortForwardEntry>,
     flags: Flags<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acl: Option<wire::Acl>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Serialize)]
@@ -62,6 +79,14 @@ struct PeerEntry<'a> {
 #[derive(Serialize)]
 struct ProxyNetworkEntry {
     cidr: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mapped_cidr: Option<String>,
+}
+
+#[derive(Serialize)]
+struct VpnPortalEntry {
+    client_cidr: String,
+    wireguard_listen: String,
 }
 
 #[derive(Serialize)]
@@ -73,41 +98,84 @@ struct PortForwardEntry {
 
 #[derive(Serialize)]
 struct Flags<'a> {
+    latency_first: bool,
+    use_smoltcp: bool,
+    enable_ipv6: bool,
+    enable_kcp_proxy: bool,
+    disable_kcp_input: bool,
+    enable_quic_proxy: bool,
+    disable_quic_input: bool,
+    disable_p2p: bool,
+    p2p_only: bool,
+    lazy_p2p: bool,
+    need_p2p: bool,
+    bind_device: bool,
     no_tun: bool,
+    enable_exit_node: bool,
+    relay_all_peer_rpc: bool,
+    multi_thread: bool,
+    proxy_forward_by_system: bool,
     enable_encryption: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     encryption_algorithm: Option<&'static str>,
+    disable_tcp_hole_punching: bool,
+    disable_udp_hole_punching: bool,
+    disable_sym_hole_punching: bool,
+    enable_udp_broadcast_relay: bool,
+    disable_upnp: bool,
+    accept_dns: bool,
     private_mode: bool,
-    enable_exit_node: bool,
-    relay_all_peer_rpc: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    relay_network_whitelist: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mtu: Option<u16>,
-    latency_first: bool,
-    disable_p2p: bool,
-    accept_dns: bool,
-    multi_thread: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance_recv_bps_limit: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    relay_network_whitelist: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     dev_name: Option<&'a str>,
 }
 
 impl NetworkProfile {
     /// Renders the profile as EasyTier's TOML config. `secret` is the network secret; an empty one leaves the key
-    /// out (a network without a secret).
+    /// out (a network without a secret). `groups` holds the secrets of the ACL groups this profile declares.
     ///
-    /// The text holds the secret: it is returned as a [`Secret`] and belongs in an owner-only file or a share link
+    /// The text holds the secrets: it is returned as a [`Secret`] and belongs in an owner-only file or a share link
     /// the person asked for, nowhere else.
     ///
     /// # Errors
     ///
     /// [`ProfileError::Managed`] for a managed profile; the first problem [`NetworkProfile::validate`] finds;
-    /// [`ProfileError::Render`] if the serializer refuses (a bug).
-    pub fn render(&self, secret: &Secret) -> Result<Secret, ProfileError> {
+    /// [`ProfileError::Acl`] for a declared group without a secret in `groups`; [`ProfileError::Render`] if the
+    /// serializer refuses (a bug).
+    pub fn render(&self, secret: &Secret, groups: &GroupSecrets) -> Result<Secret, ProfileError> {
+        self.render_with(secret, groups, true)
+    }
+
+    /// [`NetworkProfile::render`], optionally without insisting that every declared ACL group has a secret (an
+    /// export without secrets names the groups only).
+    pub fn render_with(
+        &self,
+        secret: &Secret,
+        groups: &GroupSecrets,
+        groups_required: bool,
+    ) -> Result<Secret, ProfileError> {
         if self.is_managed() {
             return Err(ProfileError::Managed);
         }
         self.validate()?;
+        let acl = match &self.acl {
+            Some(acl) => {
+                let config = AclConfig {
+                    acl: acl.clone(),
+                    group_secrets: groups.clone(),
+                };
+                if groups_required {
+                    config.check().map_err(ProfileError::Acl)?;
+                }
+                Some(config.to_wire())
+            }
+            None => None,
+        };
         let key = self.id.instance_key()?;
         let (ipv4, dhcp) = match self.ip {
             IpMode::Dhcp => (None, Some(true)),
@@ -120,8 +188,14 @@ impl NetworkProfile {
             hostname: self.hostname.as_deref(),
             ipv4,
             dhcp,
+            ipv6_public_addr_auto: self.flags.ipv6_public_addr_auto,
             listeners: self.listeners.iter().map(|l| l.as_str()).collect(),
+            mapped_listeners: self.mapped_listeners.iter().map(|l| l.as_str()).collect(),
             exit_nodes: self.exit_nodes.iter().map(ToString::to_string).collect(),
+            routes: self
+                .manual_routes
+                .as_ref()
+                .map(|routes| routes.iter().map(ToString::to_string).collect()),
             socks5_proxy: self
                 .socks5
                 .map(|s| format!("socks5://{}", std::net::SocketAddr::new(s.host, s.port))),
@@ -137,10 +211,15 @@ impl NetworkProfile {
             proxy_network: self
                 .subnet_proxy
                 .iter()
-                .map(|net| ProxyNetworkEntry {
-                    cidr: net.to_string(),
+                .map(|subnet| ProxyNetworkEntry {
+                    cidr: subnet.cidr.to_string(),
+                    mapped_cidr: subnet.mapped.map(|mapped| mapped.to_string()),
                 })
                 .collect(),
+            vpn_portal_config: self.vpn_portal.map(|portal| VpnPortalEntry {
+                client_cidr: portal.client_cidr.to_string(),
+                wireguard_listen: format!("0.0.0.0:{}", portal.listen_port),
+            }),
             port_forward: self
                 .port_forwards
                 .iter()
@@ -151,23 +230,41 @@ impl NetworkProfile {
                 })
                 .collect(),
             flags: Flags {
+                latency_first: self.flags.latency_first,
+                use_smoltcp: self.flags.use_smoltcp,
+                enable_ipv6: !self.flags.disable_ipv6,
+                enable_kcp_proxy: self.flags.enable_kcp_proxy,
+                disable_kcp_input: self.flags.disable_kcp_input,
+                enable_quic_proxy: self.flags.enable_quic_proxy,
+                disable_quic_input: self.flags.disable_quic_input,
+                disable_p2p: self.flags.disable_p2p,
+                p2p_only: self.flags.p2p_only,
+                lazy_p2p: self.flags.lazy_p2p,
+                need_p2p: self.flags.need_p2p,
+                bind_device: self.flags.bind_device,
                 no_tun: !self.tun,
-                enable_encryption: self.encryption != Encryption::Off,
-                encryption_algorithm: self.encryption.algorithm(),
-                private_mode: self.private_mode,
                 enable_exit_node: self.offers_exit_node,
                 relay_all_peer_rpc: self.relay_all_peer_rpc,
+                multi_thread: self.flags.multi_thread,
+                proxy_forward_by_system: self.flags.proxy_forward_by_system,
+                enable_encryption: self.encryption != Encryption::Off,
+                encryption_algorithm: self.encryption.algorithm(),
+                disable_tcp_hole_punching: self.flags.disable_tcp_hole_punching,
+                disable_udp_hole_punching: self.flags.disable_udp_hole_punching,
+                disable_sym_hole_punching: self.flags.disable_sym_hole_punching,
+                enable_udp_broadcast_relay: self.flags.enable_udp_broadcast_relay,
+                disable_upnp: self.flags.disable_upnp,
+                accept_dns: self.flags.accept_dns,
+                private_mode: self.private_mode,
+                mtu: self.mtu,
+                instance_recv_bps_limit: self.instance_recv_bps_limit,
                 relay_network_whitelist: match &self.relay_whitelist {
                     RelayWhitelist::Any => None,
                     RelayWhitelist::Only(names) => Some(names.join(" ")),
                 },
-                mtu: self.mtu,
-                latency_first: self.latency_first,
-                disable_p2p: self.disable_p2p,
-                accept_dns: self.accept_dns,
-                multi_thread: self.multi_thread,
                 dev_name: self.dev_name.as_deref(),
             },
+            acl,
         };
         toml::to_string(&file)
             .map(Secret::new)
@@ -178,14 +275,20 @@ impl NetworkProfile {
     /// [`Privilege::System`], the rest [`Privilege::User`]), or a managed profile's enrollment.
     ///
     /// `secret` is the profile's keychain entry: the network secret of a local profile, the control-plane address
-    /// of a managed one. `machine_id` is this installation's id (see [`crate::profile::repo::machine_id`]).
+    /// of a managed one. `groups` holds the ACL group secrets (empty for a managed profile). `machine_id` is this
+    /// installation's id (see [`crate::profile::repo::machine_id`]).
     ///
     /// # Errors
     ///
     /// The first validation problem; [`ProfileError::BadConfigServer`] for a managed profile whose address is not
     /// `tcp|udp|ws|wss://host[:port]/<account>`; [`ProfileError::BadMachineId`] for a managed profile and a machine
     /// id that is not a UUID; whatever [`NetworkProfile::render`] reports.
-    pub fn launch(&self, secret: &Secret, machine_id: &str) -> Result<NodeLaunch, ProfileError> {
+    pub fn launch(
+        &self,
+        secret: &Secret,
+        groups: &GroupSecrets,
+        machine_id: &str,
+    ) -> Result<NodeLaunch, ProfileError> {
         self.validate()?;
         let key = self.id.instance_key()?;
         match self.source {
@@ -193,7 +296,7 @@ impl NetworkProfile {
                 key,
                 privilege: self.privilege(),
                 source: LaunchSource::Local {
-                    config_toml: self.render(secret)?,
+                    config_toml: self.render(secret, groups)?,
                 },
             }),
             ConfigSource::Managed => {
@@ -258,7 +361,13 @@ fn check_machine_id(machine_id: &str) -> Result<(), ProfileError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile::model::{PortForward, ProfileId, Proto, Socks5};
+    use crate::{
+        core::settings::{PortForward, Proto},
+        profile::{
+            model::{ProfileId, Socks5, SubnetProxy},
+            testing,
+        },
+    };
 
     const ID: &str = "0123456789abcdef0123456789abcdef";
     const HEAD: &str = "instance_name = \"p-0123456789abcdef0123456789abcdef\"\ninstance_id = \"01234567-89ab-cdef-0123-456789abcdef\"\n";
@@ -272,14 +381,19 @@ mod tests {
     }
 
     fn render(profile: &NetworkProfile) -> String {
-        profile.render(&secret()).unwrap().expose().to_owned()
+        profile
+            .render(&secret(), &GroupSecrets::default())
+            .unwrap()
+            .expose()
+            .to_owned()
     }
 
     const IDENTITY: &str = "\n[network_identity]\nnetwork_name = \"example-net\"\nnetwork_secret = \"example-secret-do-not-use\"\n";
 
+    /// The `[flags]` table of a default profile (EasyTier's defaults for every switch the app does not own).
     fn flags(no_tun: bool, enc: &str, private: bool) -> String {
         format!(
-            "\n[flags]\nno_tun = {no_tun}\n{enc}private_mode = {private}\nenable_exit_node = false\nrelay_all_peer_rpc = false\nlatency_first = false\ndisable_p2p = false\naccept_dns = false\nmulti_thread = true\n"
+            "\n[flags]\nlatency_first = false\nuse_smoltcp = false\nenable_ipv6 = true\nenable_kcp_proxy = false\ndisable_kcp_input = false\nenable_quic_proxy = false\ndisable_quic_input = false\ndisable_p2p = false\np2p_only = false\nlazy_p2p = false\nneed_p2p = false\nbind_device = true\nno_tun = {no_tun}\nenable_exit_node = false\nrelay_all_peer_rpc = false\nmulti_thread = true\nproxy_forward_by_system = false\n{enc}disable_tcp_hole_punching = false\ndisable_udp_hole_punching = false\ndisable_sym_hole_punching = false\nenable_udp_broadcast_relay = false\ndisable_upnp = false\naccept_dns = false\nprivate_mode = {private}\n"
         )
     }
 
@@ -339,7 +453,7 @@ mod tests {
     #[test]
     fn subnet_proxy_exit_node_forward_and_socks5() {
         let mut p = profile();
-        p.subnet_proxy = vec!["192.168.50.0/24".parse().unwrap()];
+        p.subnet_proxy = vec![SubnetProxy::plain("192.168.50.0/24".parse().unwrap())];
         p.offers_exit_node = true;
         p.exit_nodes = vec!["10.144.144.9".parse().unwrap()];
         p.socks5 = Some(Socks5::local(1080));
@@ -349,7 +463,8 @@ mod tests {
             dst: "10.144.144.1:41201".parse().unwrap(),
         }];
         let expected = format!(
-            "{HEAD}dhcp = true\nlisteners = []\nexit_nodes = [\"10.144.144.9\"]\nsocks5_proxy = \"socks5://127.0.0.1:1080\"\n{IDENTITY}\n[[proxy_network]]\ncidr = \"192.168.50.0/24\"\n\n[[port_forward]]\nbind_addr = \"127.0.0.1:41200\"\ndst_addr = \"10.144.144.1:41201\"\nproto = \"tcp\"\n\n[flags]\nno_tun = false\nenable_encryption = true\nencryption_algorithm = \"aes-gcm\"\nprivate_mode = true\nenable_exit_node = true\nrelay_all_peer_rpc = false\nlatency_first = false\ndisable_p2p = false\naccept_dns = false\nmulti_thread = true\n"
+            "{HEAD}dhcp = true\nlisteners = []\nexit_nodes = [\"10.144.144.9\"]\nsocks5_proxy = \"socks5://127.0.0.1:1080\"\n{IDENTITY}\n[[proxy_network]]\ncidr = \"192.168.50.0/24\"\n\n[[port_forward]]\nbind_addr = \"127.0.0.1:41200\"\ndst_addr = \"10.144.144.1:41201\"\nproto = \"tcp\"\n{}",
+            flags(false, AES, true).replace("enable_exit_node = false", "enable_exit_node = true")
         );
         assert_eq!(render(&p), expected);
     }
@@ -386,24 +501,74 @@ mod tests {
     fn tuning_flags_and_whitelist() {
         let mut p = profile();
         p.mtu = Some(1400);
-        p.latency_first = true;
-        p.disable_p2p = true;
-        p.accept_dns = true;
-        p.multi_thread = false;
+        p.flags.latency_first = true;
+        p.flags.disable_p2p = true;
+        p.flags.accept_dns = true;
+        p.flags.multi_thread = false;
         p.private_mode = false;
         p.relay_all_peer_rpc = true;
         p.relay_whitelist = RelayWhitelist::Only(vec!["team-*".to_owned(), "lab".to_owned()]);
         p.dev_name = Some("et0".to_owned());
         let expected = format!(
-            "{HEAD}dhcp = true\nlisteners = []\n{IDENTITY}\n[flags]\nno_tun = false\nenable_encryption = true\nencryption_algorithm = \"aes-gcm\"\nprivate_mode = false\nenable_exit_node = false\nrelay_all_peer_rpc = true\nrelay_network_whitelist = \"team-* lab\"\nmtu = 1400\nlatency_first = true\ndisable_p2p = true\naccept_dns = true\nmulti_thread = false\ndev_name = \"et0\"\n"
+            "{HEAD}dhcp = true\nlisteners = []\n{IDENTITY}{}mtu = 1400\nrelay_network_whitelist = \"team-* lab\"\ndev_name = \"et0\"\n",
+            flags(false, AES, false)
+                .replace("latency_first = false", "latency_first = true")
+                .replace("disable_p2p = false", "disable_p2p = true")
+                .replace("accept_dns = false", "accept_dns = true")
+                .replace("multi_thread = true", "multi_thread = false")
+                .replace("relay_all_peer_rpc = false", "relay_all_peer_rpc = true")
         );
         assert_eq!(render(&p), expected);
     }
 
     #[test]
+    fn every_field_renders_to_the_keys_easytier_parsed() {
+        let (profile, groups) = testing::full_profile().unwrap();
+        let ours = profile.render(&secret(), &groups).unwrap();
+        let theirs: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/easytier-2.6.4/web-parse-config-full-request.json"
+        ))
+        .unwrap();
+        let theirs = theirs["toml_config"].as_str().unwrap();
+        let mut ours: toml::Table = toml::from_str(ours.expose()).unwrap();
+        let mut theirs: toml::Table = toml::from_str(theirs).unwrap();
+        // The identity of the instance is the app's own.
+        for table in [&mut ours, &mut theirs] {
+            table.remove("instance_name");
+            table.remove("instance_id");
+        }
+        assert_eq!(ours, theirs);
+    }
+
+    #[test]
+    fn manual_routes_are_written_only_when_on_and_empty_means_none() {
+        let mut p = profile();
+        assert!(!render(&p).contains("routes"));
+        p.manual_routes = Some(Vec::new());
+        assert!(render(&p).contains("\nroutes = []\n"));
+    }
+
+    #[test]
+    fn a_declared_group_without_a_secret_does_not_render() {
+        let (profile, _) = testing::full_profile().unwrap();
+        assert!(matches!(
+            profile.render(&secret(), &GroupSecrets::default()),
+            Err(ProfileError::Acl(_))
+        ));
+    }
+
+    #[test]
+    fn group_secrets_stay_out_of_debug_output() {
+        let (_, groups) = testing::full_profile().unwrap();
+        assert!(!format!("{groups:?}").contains("example-group-secret"));
+    }
+
+    #[test]
     fn an_empty_secret_leaves_the_key_out() {
         let p = profile();
-        let text = p.render(&Secret::new("")).unwrap();
+        let text = p
+            .render(&Secret::new(""), &GroupSecrets::default())
+            .unwrap();
         assert!(
             text.expose()
                 .contains("network_name = \"example-net\"\n\n[flags]")
@@ -414,11 +579,14 @@ mod tests {
     #[test]
     fn managed_and_invalid_profiles_do_not_render() {
         let managed = NetworkProfile::managed(ProfileId::parse(ID).unwrap(), "Office");
-        assert_eq!(managed.render(&secret()), Err(ProfileError::Managed));
+        assert_eq!(
+            managed.render(&secret(), &GroupSecrets::default()),
+            Err(ProfileError::Managed)
+        );
         let mut bad = profile();
         bad.network_name = String::new();
         assert!(matches!(
-            bad.render(&secret()),
+            bad.render(&secret(), &GroupSecrets::default()),
             Err(ProfileError::Empty { .. })
         ));
     }
@@ -427,7 +595,11 @@ mod tests {
     fn local_launches_follow_the_tun_choice() {
         let p = profile();
         let launch = p
-            .launch(&secret(), "6f9619ff-8b86-d011-b42d-00c04fc964ff")
+            .launch(
+                &secret(),
+                &GroupSecrets::default(),
+                "6f9619ff-8b86-d011-b42d-00c04fc964ff",
+            )
             .unwrap();
         assert_eq!(launch.key.as_str(), "p-0123456789abcdef0123456789abcdef");
         assert_eq!(launch.privilege, Privilege::System);
@@ -439,7 +611,11 @@ mod tests {
         no_tun.tun = false;
         assert_eq!(
             no_tun
-                .launch(&secret(), "6f9619ff-8b86-d011-b42d-00c04fc964ff")
+                .launch(
+                    &secret(),
+                    &GroupSecrets::default(),
+                    "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+                )
                 .unwrap()
                 .privilege,
             Privilege::User
@@ -452,7 +628,9 @@ mod tests {
         p.hostname = Some("laptop".to_owned());
         let address = Secret::new("udp://control.example.com:22020/team-7f3k9q");
         let machine = "6f9619ff-8b86-d011-b42d-00c04fc964ff";
-        let launch = p.launch(&address, machine).unwrap();
+        let launch = p
+            .launch(&address, &GroupSecrets::default(), machine)
+            .unwrap();
         assert_eq!(launch.privilege, Privilege::User);
         assert_eq!(
             launch.source,
@@ -466,13 +644,14 @@ mod tests {
         let error = p
             .launch(
                 &Secret::new("http://control.example.com/team-7f3k9q"),
+                &GroupSecrets::default(),
                 machine,
             )
             .unwrap_err();
         assert_eq!(error, ProfileError::BadConfigServer);
         assert!(!error.to_string().contains("team-7f3k9q"));
         assert_eq!(
-            p.launch(&address, "not-a-uuid"),
+            p.launch(&address, &GroupSecrets::default(), "not-a-uuid"),
             Err(ProfileError::BadMachineId)
         );
     }

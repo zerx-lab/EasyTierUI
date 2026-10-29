@@ -1,11 +1,14 @@
 //! Dialogs and confirmations (DESIGN.md "Dialogs and Sheets"). Desktops and the web: a centered panel over a scrim,
-//! 24 pt padding, 480 pt wide (640 pt for config editors), Dialog lift. Phones: a full-height page sheet. Confirmations
-//! on every platform are the platform's own alert.
+//! 24 pt padding, 480 pt wide (640 pt for config editors), Dialog lift; the layer fades in while the panel settles
+//! into place, and fades out as it was. Phones: a full-height page sheet. Confirmations on every platform are the
+//! platform's own alert.
 
 use std::rc::Rc;
 
 use nsh_base::{alert_dialog, dialog, theme};
-use nsh_core::{ModalPresentation, prelude::*};
+use nsh_core::{ModalAnimation, ModalPresentation, prelude::*};
+
+use super::motion::entrance;
 
 /// The panel's width in points on the desktops (DESIGN.md).
 const STANDARD_WIDTH: f32 = 480.0;
@@ -19,6 +22,12 @@ const SCRIM_OPACITY: f32 = 0.4;
 /// The room a focus ring needs outside a field in points: its 2 pt outline and 2 pt offset (DESIGN.md "Inputs /
 /// Fields"), a physical size equal to spacing step 1.
 const RING_ROOM: f32 = 4.0;
+
+/// How small the panel starts as it comes in: it grows into place where it will stay, never slides across the window.
+const ENTER_SCALE: f32 = 0.96;
+
+/// How far below its place the panel starts, in points (spacing step 2).
+const ENTER_RISE: f32 = 8.0;
 
 /// A dialog under construction: give it a body and a footer, then place it as a child anywhere in the page. It is on
 /// screen while `open()` holds.
@@ -125,6 +134,15 @@ impl DialogFrame {
                     .on_cancel(move || close_cancel());
                 if is_desktop() {
                     let close_scrim = on_close.clone();
+                    // The scrim and the panel fade in and out together as one layer (the platform snapshots it on
+                    // the way out, so a body that empties as its state closes never shows); the panel also grows and
+                    // rises into place. Under Reduce Motion it all appears and goes at once.
+                    let layer_motion = if reduce_motion() {
+                        ModalAnimation::None
+                    } else {
+                        ModalAnimation::Fade
+                    };
+                    let settle = entrance();
                     let panel = view()
                         .w(Points(width))
                         .max_w(relative(1.0))
@@ -136,6 +154,8 @@ impl DialogFrame {
                         .border_color(move || theme().border)
                         .bg(move || theme().card)
                         .shadow_lg()
+                        .bind_scale(&settle.interpolate(&[0.0, 1.0], &[ENTER_SCALE, 1.0]))
+                        .bind_translate_y(&settle.interpolate(&[0.0, 1.0], &[ENTER_RISE, 0.0]))
                         .child(title_text)
                         .when_some(content, |panel, content| {
                             // A focused field draws a 2 pt ring 2 pt outside its edge; the scroll view clips at
@@ -153,7 +173,7 @@ impl DialogFrame {
                         Some(id) => panel.test_id(&id),
                         None => panel,
                     };
-                    modal.child(
+                    modal.animation(layer_motion).child(
                         view()
                             .size_full()
                             .items_center()

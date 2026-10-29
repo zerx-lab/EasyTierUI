@@ -32,6 +32,18 @@ pub struct SharedStrings {
     pub field_socks5: &'static str,
     /// Field: port forwards.
     pub field_port_forwards: &'static str,
+    /// Field: the receive speed limit.
+    pub field_recv_limit: &'static str,
+    /// Field: mapped listeners.
+    pub field_mapped_listeners: &'static str,
+    /// Field: manual routes.
+    pub field_routes: &'static str,
+    /// Field: the VPN portal's client network.
+    pub field_vpn_portal_cidr: &'static str,
+    /// Field: the VPN portal's port.
+    pub field_vpn_portal_port: &'static str,
+    /// Field: access control.
+    pub field_acl: &'static str,
     /// Field: the relay whitelist.
     pub field_relay_whitelist: &'static str,
     /// Field: the control plane's address.
@@ -89,6 +101,12 @@ pub struct SharedStrings {
     pub reason_forward_shape: &'static str,
     /// Reason: control-plane address shape.
     pub reason_config_server_shape: &'static str,
+    /// Reason: a mapped subnet of another size.
+    pub reason_mapped_size: &'static str,
+    /// Reason: a number that must be above zero.
+    pub reason_must_be_positive: &'static str,
+    /// Reason: the access-control section has a problem (its editor shows where).
+    pub reason_acl: &'static str,
     /// Reason: anything else.
     pub reason_other: &'static str,
 
@@ -168,6 +186,10 @@ pub struct SharedStrings {
     pub exposure_relays_all_rpc: &'static str,
     /// Exposure: relay whitelist too wide.
     pub exposure_wide_whitelist: &'static str,
+    /// Exposure: the VPN portal.
+    pub exposure_vpn_portal: &'static str,
+    /// Exposure: the OS forwards subnet traffic.
+    pub exposure_forward_by_system: &'static str,
 
     /// A network failed: no privileges.
     pub failure_no_privileges: &'static str,
@@ -223,6 +245,12 @@ pub(super) static EN: SharedStrings = SharedStrings {
     field_exit_nodes: "Exit nodes",
     field_socks5: "SOCKS5 proxy",
     field_port_forwards: "Port forwards",
+    field_recv_limit: "Receive speed limit",
+    field_mapped_listeners: "Mapped listeners",
+    field_routes: "Manual routes",
+    field_vpn_portal_cidr: "VPN portal client network",
+    field_vpn_portal_port: "VPN portal port",
+    field_acl: "Access control",
     field_relay_whitelist: "Relay whitelist",
     field_config_server: "Control plane address",
     field_import: "Config or link",
@@ -252,6 +280,9 @@ pub(super) static EN: SharedStrings = SharedStrings {
     reason_reserved: "This address can't be used here.",
     reason_forward_shape: "Write each forward as protocol, local address and destination address.",
     reason_config_server_shape: "Use the address your control plane gave you: protocol, host, port and account.",
+    reason_mapped_size: "The mapped network must be the same size as the subnet it stands for.",
+    reason_must_be_positive: "Enter a whole number above 0, or leave it empty.",
+    reason_acl: "Something in the access-control section isn't valid. Check the access-control section.",
     reason_other: "This value isn't valid.",
 
     save_keychain: "The system keychain wouldn't keep the secret. Nothing was saved.",
@@ -293,6 +324,8 @@ pub(super) static EN: SharedStrings = SharedStrings {
     exposure_private_mode_off: "Private mode is off: peers from other networks are accepted without the secret.",
     exposure_relays_all_rpc: "Relays control traffic for every peer, not only for this network.",
     exposure_wide_whitelist: "Relays for any network without needing its secret.",
+    exposure_vpn_portal: "WireGuard clients can join the network through this node, from every network this device is on.",
+    exposure_forward_by_system: "Subnet traffic is forwarded by the operating system, so the system's firewall and routing rules apply to it.",
 
     failure_no_privileges: "Creating the network interface needs administrator rights.",
     failure_core_missing: "EasyTier isn't installed on this device.",
@@ -329,6 +362,12 @@ pub(super) static ZH_CN: SharedStrings = SharedStrings {
     field_exit_nodes: "出口节点",
     field_socks5: "SOCKS5 代理",
     field_port_forwards: "端口转发",
+    field_recv_limit: "接收速率限制",
+    field_mapped_listeners: "映射监听地址",
+    field_routes: "手动路由",
+    field_vpn_portal_cidr: "VPN 门户客户端网段",
+    field_vpn_portal_port: "VPN 门户端口",
+    field_acl: "访问控制",
     field_relay_whitelist: "中继白名单",
     field_config_server: "控制平面地址",
     field_import: "配置或链接",
@@ -358,6 +397,9 @@ pub(super) static ZH_CN: SharedStrings = SharedStrings {
     reason_reserved: "这个地址不能在此使用。",
     reason_forward_shape: "每条转发依次写协议、本机地址和目标地址。",
     reason_config_server_shape: "请使用控制平面提供的地址：协议、主机、端口和账号。",
+    reason_mapped_size: "映射后的网段必须与它所代表的子网大小相同。",
+    reason_must_be_positive: "请输入大于 0 的整数，或留空。",
+    reason_acl: "访问控制部分有无效内容，请检查访问控制部分。",
     reason_other: "这个值无效。",
 
     save_keychain: "系统钥匙串没有保存密钥，没有保存任何内容。",
@@ -399,6 +441,8 @@ pub(super) static ZH_CN: SharedStrings = SharedStrings {
     exposure_private_mode_off: "私有模式已关闭：其他网络的节点无需密钥即可接入。",
     exposure_relays_all_rpc: "为所有对等节点中继控制流量，而不只是本网络。",
     exposure_wide_whitelist: "为任何网络提供中继，无需对方的密钥。",
+    exposure_vpn_portal: "WireGuard 客户端可以经本节点接入网络，这台设备所在的每个网络都能连到它。",
+    exposure_forward_by_system: "子网流量由操作系统转发，因此系统的防火墙和路由规则会作用于它。",
 
     failure_no_privileges: "创建虚拟网卡需要管理员权限。",
     failure_core_missing: "此设备上没有安装 EasyTier。",

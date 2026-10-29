@@ -1,7 +1,7 @@
 //! The dialogs' operations: the create and join flows, the network dialog (editor, logs, export), import and managed
 //! enrollment. Pages change a draft through the `edit_*` functions and press the operations; nothing here is shown.
 //!
-//! Saving writes the secret to the keychain first (off the engine thread), then the profile to the app's storage.
+//! Saving writes the secrets to the keychain first (off the engine thread), then the profile to the app's storage.
 
 use nsh_core::{picker::PickRequest, prelude::*, time::unix_ms};
 
@@ -11,7 +11,7 @@ use super::{
     NodeStore, ProblemKind, SaveFailure, Status, parse_import,
 };
 use crate::{
-    core::{secret::Secret, work::off_thread},
+    core::{acl::GroupSecrets, secret::Secret, work::off_thread},
     profile::{
         self, Imported, MAX_NAME_CHARS, NetworkProfile, NshStorage, ProfileError, ProfileId,
         RepoError, clean_name, repo,
@@ -24,7 +24,7 @@ pub(super) fn save_failure(error: RepoError) -> SaveFailure {
         RepoError::Damaged => SaveFailure::Damaged,
         RepoError::NewerSchema { .. } => SaveFailure::NewerSchema,
         RepoError::StorageFull => SaveFailure::StorageFull,
-        RepoError::Keychain(_) => SaveFailure::Keychain,
+        RepoError::Keychain(_) | RepoError::GroupSecrets => SaveFailure::Keychain,
         RepoError::Profile(ProfileError::NoRandomSource) => SaveFailure::NoRandomSource,
         RepoError::Profile(profile) => SaveFailure::Invalid(FieldProblem::from(&profile)),
         RepoError::Serialize => {
@@ -45,15 +45,35 @@ fn show_preview(draft: &mut ImportDraft, imported: Imported) {
 }
 
 impl NodeStore {
-    /// Stores `profile` (replacing the one with its id) and, if given, its secret: the keychain first, off the engine
-    /// thread, then the app's storage.
+    /// Stores `profile` (replacing the one with its id) and, if given, its secret and its ACL group secrets: the
+    /// keychain first, off the engine thread, then the app's storage. An empty `groups` deletes the stored entry.
     pub(super) async fn persist(
         self,
         profile: NetworkProfile,
         secret: Option<Secret>,
+        groups: Option<GroupSecrets>,
     ) -> Result<(), SaveFailure> {
         if !self.alive() {
             return Err(SaveFailure::Background);
+        }
+        if let Some(groups) = groups {
+            let secrets = self.secrets.get();
+            let for_groups = profile.clone();
+            match off_thread(move || {
+                repo::save_group_secrets(secrets.as_ref(), &for_groups, &groups)
+            })
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    log::warn!("the ACL group secrets were not kept: {error}");
+                    return Err(SaveFailure::Keychain);
+                }
+                Err(error) => {
+                    log::warn!("keeping the ACL group secrets was lost: {error}");
+                    return Err(SaveFailure::Background);
+                }
+            }
         }
         if let Some(secret) = secret {
             let secrets = self.secrets.get();
@@ -249,7 +269,7 @@ impl NodeStore {
         let secret = draft.secret.clone();
         let this = *self;
         spawn(async move {
-            match this.persist(profile, Some(secret)).await {
+            match this.persist(profile, Some(secret), None).await {
                 Ok(()) => {
                     if this.alive() {
                         this.flow.set(None);
@@ -344,30 +364,40 @@ impl NodeStore {
         }
     }
 
-    /// Reads the saved secret into the editor (off the engine thread).
+    /// Reads the saved secret and ACL group secrets into the editor (off the engine thread).
     fn load_editor_secret(&self, profile: NetworkProfile) {
         let secrets = self.secrets.get();
         let id = profile.id.clone();
         let this = *self;
         spawn(async move {
-            let answer = off_thread(move || repo::load_secret(secrets.as_ref(), &profile)).await;
+            let answer = off_thread(move || {
+                let secret = repo::load_secret(secrets.as_ref(), &profile)?;
+                let groups = repo::load_group_secrets(secrets.as_ref(), &profile)?;
+                Ok::<_, RepoError>((secret, groups))
+            })
+            .await;
             if !this.alive() {
                 return;
             }
             this.edit_editor_of(&id, |draft| {
                 draft.secret_loaded = true;
                 match answer {
-                    Ok(Ok(Some(secret))) => {
-                        if !draft.secret_changed {
-                            draft.secret = secret;
+                    Ok(Ok((secret, groups))) => {
+                        match secret {
+                            Some(secret) => {
+                                if !draft.secret_changed {
+                                    draft.secret = secret;
+                                }
+                            }
+                            None => draft.secret_missing = true,
                         }
+                        draft.apply_group_secrets(groups);
                     }
-                    Ok(Ok(None)) => draft.secret_missing = true,
                     Ok(Err(error)) => {
-                        log::warn!("the keychain would not give the secret: {error}");
+                        log::warn!("the keychain would not give the secrets: {error}");
                         draft.failure = Some(SaveFailure::Keychain);
                     }
-                    Err(error) => log::warn!("reading the secret was lost: {error}"),
+                    Err(error) => log::warn!("reading the secrets was lost: {error}"),
                 }
             });
         });
@@ -398,6 +428,7 @@ impl NodeStore {
             return;
         };
         let secret = (draft.secret_changed && !draft.is_managed()).then(|| draft.secret.clone());
+        let groups = draft.group_secrets_to_save();
         let id = profile.id.clone();
         let was_up = matches!(
             self.status_untracked(&id),
@@ -409,7 +440,7 @@ impl NodeStore {
         });
         let this = *self;
         spawn(async move {
-            match this.persist(profile, secret).await {
+            match this.persist(profile, secret, groups).await {
                 Ok(()) => {
                     this.close_detail();
                     if was_up {
@@ -481,7 +512,7 @@ impl NodeStore {
         });
     }
 
-    /// Makes the export of network `id`'s saved profile, with its secret if [`ExportView::include_secret`].
+    /// Makes the export of network `id`'s saved profile, with its secrets if [`ExportView::include_secret`].
     pub fn refresh_export(&self, id: ProfileId) {
         if !self.alive() {
             return;
@@ -499,25 +530,32 @@ impl NodeStore {
             ..ExportView::default()
         });
         if !include {
-            self.finish_export(&profile, None, include);
+            self.finish_export(&profile, None, GroupSecrets::default(), include);
             return;
         }
         let secrets = self.secrets.get();
         let this = *self;
         let for_secret = profile.clone();
         spawn(async move {
-            let answer = off_thread(move || repo::load_secret(secrets.as_ref(), &for_secret)).await;
+            let answer = off_thread(move || {
+                let secret = repo::load_secret(secrets.as_ref(), &for_secret)?;
+                let groups = repo::load_group_secrets(secrets.as_ref(), &for_secret)?;
+                Ok::<_, RepoError>((secret, groups))
+            })
+            .await;
             if !this.alive() {
                 return;
             }
             match answer {
-                Ok(Ok(secret)) => this.finish_export(&profile, Some(secret), include),
+                Ok(Ok((secret, groups))) => {
+                    this.finish_export(&profile, Some(secret), groups, include);
+                }
                 Ok(Err(error)) => {
-                    log::warn!("the keychain would not give the secret: {error}");
+                    log::warn!("the keychain would not give the secrets: {error}");
                     this.fail_export(&profile.id, ExportFailure::Keychain);
                 }
                 Err(error) => {
-                    log::warn!("reading the secret was lost: {error}");
+                    log::warn!("reading the secrets was lost: {error}");
                     this.fail_export(&profile.id, ExportFailure::Keychain);
                 }
             }
@@ -539,6 +577,7 @@ impl NodeStore {
         &self,
         profile: &NetworkProfile,
         secret: Option<Option<Secret>>,
+        groups: GroupSecrets,
         include: bool,
     ) {
         let stale = self
@@ -548,9 +587,22 @@ impl NodeStore {
             return;
         }
         let secret_missing = include && matches!(secret, Some(None));
-        let used = secret.flatten().unwrap_or_default();
-        let rendered = profile.render(&used);
-        let link = profile::share_link(profile, Some(&used), include);
+        let secret = secret.flatten().unwrap_or_default();
+        // Group secrets that are not all there cannot be exported: the export then leaves every secret out and says so.
+        let groups_incomplete = include
+            && profile.acl.as_ref().is_some_and(|acl| {
+                acl.declared_groups
+                    .iter()
+                    .any(|name| groups.get(name).is_none_or(Secret::is_empty))
+            });
+        let with_secrets = include && !groups_incomplete;
+        let (used, groups) = if with_secrets {
+            (secret, groups)
+        } else {
+            (Secret::default(), GroupSecrets::default())
+        };
+        let rendered = profile.render_with(&used, &groups, with_secrets);
+        let link = profile::share_link(profile, Some(&used), &groups, with_secrets);
         let (Ok(toml), Ok(link)) = (rendered, link) else {
             self.fail_export(&profile.id, ExportFailure::Invalid);
             return;
@@ -574,7 +626,7 @@ impl NodeStore {
             view.link = Some(link);
             view.qr = qr;
             view.failure = failure;
-            view.secret_missing = secret_missing;
+            view.secret_missing = secret_missing || groups_incomplete;
         });
     }
 
@@ -697,13 +749,14 @@ impl NodeStore {
             profile.tun = false;
         }
         let secret = (!draft.secret.is_empty()).then(|| draft.secret.clone());
+        let groups = (!imported.group_secrets.is_empty()).then(|| imported.group_secrets.clone());
         self.edit_import(|draft| {
             draft.saving = true;
             draft.save_failure = None;
         });
         let this = *self;
         spawn(async move {
-            match this.persist(profile, secret).await {
+            match this.persist(profile, secret, groups).await {
                 Ok(()) => this.close_import(),
                 Err(failure) => this.edit_import(|draft| {
                     draft.saving = false;
@@ -771,7 +824,7 @@ impl NodeStore {
         });
         let this = *self;
         spawn(async move {
-            match this.persist(profile, Some(address)).await {
+            match this.persist(profile, Some(address), None).await {
                 Ok(()) => {
                     if this.alive() {
                         this.managed.set(None);

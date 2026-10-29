@@ -29,6 +29,10 @@ pub enum RemoteError {
     /// The server did not answer in time.
     #[error("the server did not answer in time")]
     Timeout,
+    /// easytier-web answered, but the machine behind it did not: the server's call to the machine's core failed
+    /// or timed out (502 / 504 with easytier-web's own `{"message"}` body). The server itself is fine.
+    #[error("the machine did not answer the server: {0}")]
+    MachineNoAnswer(String),
     /// The request never got an answer: the network, DNS, TLS or (in the browser) CORS failed.
     #[error("could not reach the server: {0}")]
     Network(String),

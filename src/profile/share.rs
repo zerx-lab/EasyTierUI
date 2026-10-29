@@ -15,7 +15,7 @@ use super::{
     import::{ImportError, Imported, import_toml_with_id},
     model::{NetworkProfile, ProfileId},
 };
-use crate::core::secret::Secret;
+use crate::core::{acl::GroupSecrets, secret::Secret};
 
 /// The start of every share link.
 pub const LINK_PREFIX: &str = "easytierui://import";
@@ -82,25 +82,29 @@ pub enum ShareError {
 
 /// Makes the share link of `profile`.
 ///
-/// The network secret is part of the link only when `include_secret` is `true` and `secret` is given; otherwise the
-/// link names the network but not its secret, and whoever imports it must enter that. The result is a [`Secret`]
-/// either way: it is a copy of the profile's config.
+/// The network secret and the ACL group secrets are part of the link only when `include_secret` is `true` (the
+/// network secret also needs `secret` to be given); otherwise the link names the network and the declared groups but
+/// no secrets, and whoever imports it must enter them (the import preview counts the groups without one). The
+/// result is a [`Secret`] either way: it is a copy of the profile's config.
 ///
 /// # Errors
 ///
-/// [`ShareError::Profile`] when the profile does not render (managed, invalid).
+/// [`ShareError::Profile`] when the profile does not render (managed, invalid, or secrets are included and a
+/// declared group has none in `groups`).
 pub fn share_link(
     profile: &NetworkProfile,
     secret: Option<&Secret>,
+    groups: &GroupSecrets,
     include_secret: bool,
 ) -> Result<Secret, ShareError> {
     let none = Secret::default();
-    let secret = if include_secret {
-        secret.unwrap_or(&none)
+    let no_groups = GroupSecrets::default();
+    let (secret, groups) = if include_secret {
+        (secret.unwrap_or(&none), groups)
     } else {
-        &none
+        (&none, &no_groups)
     };
-    let toml = profile.render(secret)?;
+    let toml = profile.render_with(secret, groups, include_secret)?;
     let capacity = LINK_PREFIX
         .len()
         .saturating_add(toml.expose().len().saturating_mul(2));
@@ -381,7 +385,10 @@ fn gray_from_jpeg(bytes: &[u8]) -> Result<Gray, ShareError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile::model::{IpMode, Socks5};
+    use crate::profile::{
+        model::{IpMode, Socks5},
+        testing,
+    };
 
     const ID: &str = "0123456789abcdef0123456789abcdef";
 
@@ -403,7 +410,7 @@ mod tests {
 
     #[test]
     fn links_round_trip_with_the_secret() {
-        let link = share_link(&profile(), Some(&secret()), true).unwrap();
+        let link = share_link(&profile(), Some(&secret()), &GroupSecrets::default(), true).unwrap();
         assert!(link.expose().starts_with("easytierui://import?v=1&c="));
         assert_eq!(format!("{link:?}"), "Secret(***)");
         let imported = parse_share_link_with_id(link.expose(), id()).unwrap();
@@ -415,7 +422,13 @@ mod tests {
     #[test]
     fn links_leave_the_secret_out_unless_asked() {
         for (given, include) in [(Some(secret()), false), (None, false), (None, true)] {
-            let link = share_link(&profile(), given.as_ref(), include).unwrap();
+            let link = share_link(
+                &profile(),
+                given.as_ref(),
+                &GroupSecrets::default(),
+                include,
+            )
+            .unwrap();
             let imported = parse_share_link_with_id(link.expose(), id()).unwrap();
             assert_eq!(imported.profile, profile());
             assert_eq!(imported.secret, None);
@@ -428,8 +441,50 @@ mod tests {
     }
 
     #[test]
+    fn group_secrets_travel_exactly_when_the_network_secret_does() {
+        let (full, groups) = testing::full_profile().unwrap();
+        let id = full.id.clone();
+        let with = share_link(&full, Some(&secret()), &groups, true).unwrap();
+        let imported = parse_share_link_with_id(with.expose(), id.clone()).unwrap();
+        assert_eq!(imported.profile, full);
+        assert_eq!(imported.secret, Some(secret()));
+        assert_eq!(imported.group_secrets, groups);
+        assert_eq!(
+            imported
+                .preview
+                .acl
+                .as_ref()
+                .map(|acl| acl.groups_without_secret),
+            Some(0)
+        );
+
+        let without = share_link(&full, Some(&secret()), &groups, false).unwrap();
+        let payload = without.expose().split("&c=").nth(1).unwrap();
+        let decoded = String::from_utf8(URL_SAFE_NO_PAD.decode(payload).unwrap()).unwrap();
+        assert!(!decoded.contains("example-group-secret"));
+        assert!(!decoded.contains("network_secret"));
+        let imported = parse_share_link_with_id(without.expose(), id).unwrap();
+        assert_eq!(imported.profile.acl, full.acl);
+        assert!(imported.group_secrets.is_empty());
+        assert_eq!(
+            imported
+                .preview
+                .acl
+                .as_ref()
+                .map(|acl| acl.groups_without_secret),
+            Some(1)
+        );
+
+        // Asking for secrets without having a group's secret is an error, not a link with a hole in it.
+        assert!(matches!(
+            share_link(&full, Some(&secret()), &GroupSecrets::default(), true),
+            Err(ShareError::Profile(ProfileError::Acl(_)))
+        ));
+    }
+
+    #[test]
     fn links_survive_whitespace_padding_and_extra_parameters() {
-        let link = share_link(&profile(), Some(&secret()), true).unwrap();
+        let link = share_link(&profile(), Some(&secret()), &GroupSecrets::default(), true).unwrap();
         let padded = format!("  {}&utm=1\n", link.expose());
         assert_eq!(
             parse_share_link_with_id(&padded, id()).unwrap().profile,
@@ -495,7 +550,7 @@ mod tests {
     fn managed_profiles_have_nothing_to_share() {
         let managed = NetworkProfile::managed(id(), "Office");
         assert_eq!(
-            share_link(&managed, None, false),
+            share_link(&managed, None, &GroupSecrets::default(), false),
             Err(ShareError::Profile(ProfileError::Managed))
         );
     }
@@ -534,7 +589,7 @@ mod tests {
 
     #[test]
     fn qr_codes_encode_and_decode_from_a_png() {
-        let link = share_link(&profile(), Some(&secret()), true).unwrap();
+        let link = share_link(&profile(), Some(&secret()), &GroupSecrets::default(), true).unwrap();
         let matrix = qr_matrix(link.expose()).unwrap();
         assert!(matrix.size() >= 21);
         assert!(!format!("{matrix:?}").contains("easytierui"));
@@ -549,7 +604,8 @@ mod tests {
 
     #[test]
     fn qr_codes_without_the_secret_decode_without_it() {
-        let link = share_link(&profile(), Some(&secret()), false).unwrap();
+        let link =
+            share_link(&profile(), Some(&secret()), &GroupSecrets::default(), false).unwrap();
         let png = render_png(&qr_matrix(link.expose()).unwrap(), 3);
         let imported = import_qr_image(&png).unwrap();
         assert_eq!(imported.secret, None);

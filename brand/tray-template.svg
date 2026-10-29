@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<!-- The macOS menu-bar template (brand/tray-template.png, 44 px): the logo in one opaque color on transparency; the
+     menu bar tints it for its appearance. Thicker strokes than logo.svg so it holds at 22 pt. -->
+<path d="M50 18L18 50L50 82L82 50Z M50 18V82 M18 50H82" fill="none" stroke="#000" stroke-width="8" stroke-linejoin="round"/>
+<g fill="#000"><circle cx="50" cy="16" r="12"/><circle cx="16" cy="50" r="12"/><circle cx="50" cy="84" r="12"/><circle cx="84" cy="50" r="14"/></g>
+</svg>

@@ -1,0 +1,142 @@
+{
+  "error": null,
+  "config": {
+    "instance_id": "01234567-89ab-cdef-0123-456789abcdef",
+    "dhcp": false,
+    "virtual_ipv4": "10.144.144.5",
+    "network_length": 24,
+    "hostname": "probe-host",
+    "network_name": "probe-net",
+    "network_secret": "example-secret-do-not-use",
+    "networking_method": 1,
+    "public_server_url": null,
+    "peer_urls": [
+      "tcp://203.0.113.9:11010"
+    ],
+    "proxy_cidrs": [
+      "192.168.50.0/24->10.50.0.0/24"
+    ],
+    "enable_vpn_portal": true,
+    "vpn_portal_listen_port": 22022,
+    "vpn_portal_client_network_addr": "10.14.14.0",
+    "vpn_portal_client_network_len": 24,
+    "advanced_settings": null,
+    "listener_urls": [
+      "tcp://0.0.0.0:11010",
+      "udp://0.0.0.0:11010"
+    ],
+    "latency_first": true,
+    "dev_name": "et0",
+    "use_smoltcp": true,
+    "disable_ipv6": true,
+    "enable_kcp_proxy": true,
+    "disable_kcp_input": true,
+    "disable_p2p": true,
+    "bind_device": false,
+    "no_tun": true,
+    "enable_exit_node": true,
+    "relay_all_peer_rpc": true,
+    "multi_thread": false,
+    "enable_relay_network_whitelist": true,
+    "relay_network_whitelist": [
+      "team-*",
+      "other"
+    ],
+    "enable_manual_routes": true,
+    "routes": [
+      "192.168.0.0/16"
+    ],
+    "exit_nodes": [
+      "10.144.144.1"
+    ],
+    "proxy_forward_by_system": true,
+    "disable_encryption": false,
+    "enable_socks5": true,
+    "socks5_port": 1080,
+    "disable_udp_hole_punching": true,
+    "mtu": 1300,
+    "mapped_listeners": [
+      "tcp://203.0.113.5:11223"
+    ],
+    "enable_magic_dns": true,
+    "enable_private_mode": true,
+    "enable_quic_proxy": true,
+    "disable_quic_input": true,
+    "quic_listen_port": null,
+    "port_forwards": [
+      {
+        "bind_ip": "127.0.0.1",
+        "bind_port": 8080,
+        "dst_ip": "10.144.144.2",
+        "dst_port": 80,
+        "proto": "tcp"
+      }
+    ],
+    "disable_sym_hole_punching": true,
+    "p2p_only": true,
+    "data_compress_algo": null,
+    "encryption_algorithm": null,
+    "disable_tcp_hole_punching": true,
+    "secure_mode": null,
+    "acl": {
+      "acl_v1": {
+        "chains": [
+          {
+            "name": "Inbound",
+            "chain_type": 1,
+            "description": "d",
+            "enabled": true,
+            "rules": [
+              {
+                "name": "web",
+                "description": "",
+                "priority": 1000,
+                "enabled": true,
+                "protocol": 1,
+                "ports": [
+                  "80",
+                  "8000-8080"
+                ],
+                "source_ips": [
+                  "10.144.144.0/24"
+                ],
+                "destination_ips": [],
+                "source_ports": [],
+                "action": 1,
+                "rate_limit": 0,
+                "burst_limit": 0,
+                "stateful": true,
+                "source_groups": [
+                  "admins"
+                ],
+                "destination_groups": []
+              }
+            ],
+            "default_action": 2
+          }
+        ],
+        "group": {
+          "declares": [
+            {
+              "group_name": "admins",
+              "group_secret": "example-group-secret"
+            }
+          ],
+          "members": [
+            "admins"
+          ]
+        }
+      }
+    },
+    "credential_file": null,
+    "lazy_p2p": true,
+    "need_p2p": true,
+    "instance_recv_bps_limit": 1048576,
+    "disable_upnp": true,
+    "ipv6_public_addr_provider": null,
+    "ipv6_public_addr_auto": true,
+    "ipv6_public_addr_prefix": null,
+    "disable_relay_data": false,
+    "enable_udp_broadcast_relay": true
+  }
+}

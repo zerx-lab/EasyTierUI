@@ -558,5 +558,7 @@ fn startup_strings() -> &'static crate::i18n::Strings {
     let choice = Storage::get_item(super::LANGUAGE_KEY)
         .and_then(|kept| LanguageChoice::from_key(&kept))
         .unwrap_or_default();
-    choice.resolve(locale().as_str()).strings()
+    choice
+        .resolve(&crate::i18n::system_language_tag())
+        .strings()
 }

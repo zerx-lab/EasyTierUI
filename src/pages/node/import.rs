@@ -15,7 +15,7 @@ use crate::{
         secret_field, section_label,
     },
     core::secret::{Secret, Strength},
-    i18n::node::ImportStrings,
+    i18n::{fill, node::ImportStrings},
     profile::{Encryption, IpMode},
     store::{
         Store,
@@ -287,6 +287,76 @@ fn preview(store: Store) -> View {
         .iter()
         .map(|subnet| machine_text(subnet.to_string()).into_element())
         .collect();
+    let routes = match &plan.manual_routes {
+        Some(routes) if routes.is_empty() => vec![word(store, |w| w.routes_empty).into_element()],
+        Some(routes) => routes
+            .iter()
+            .map(|route| machine_text(route.to_string()).into_element())
+            .collect(),
+        None => Vec::new(),
+    };
+    let mapped_listeners = plan
+        .mapped_listeners
+        .iter()
+        .map(|listener| machine_text(listener.to_string()).into_element())
+        .collect();
+    let vpn_portal = plan
+        .vpn_portal
+        .iter()
+        .map(|portal| {
+            tagged_value(
+                format!("{} · UDP {}", portal.client_cidr, portal.listen_port),
+                vec![note(store, |w| w.listener_all_interfaces).into_element()],
+            )
+        })
+        .collect();
+    let recv_limit = plan
+        .instance_recv_bps_limit
+        .iter()
+        .map(|limit| {
+            let limit = limit.to_string();
+            let strings = store.strings().node.import;
+            body_text(fill(strings.recv_limit_value, &[("limit", &limit)])).into_element()
+        })
+        .collect();
+    let acl = plan
+        .acl
+        .iter()
+        .flat_map(|acl| {
+            let strings = store.strings().node.import;
+            let (chains, rules) = (acl.chains.to_string(), acl.rules.to_string());
+            let mut lines = vec![
+                body_text(fill(
+                    strings.acl_summary,
+                    &[("chains", &chains), ("rules", &rules)],
+                ))
+                .into_element(),
+            ];
+            if !acl.declared_groups.is_empty() {
+                lines.push(
+                    view()
+                        .flex_row()
+                        .flex_wrap()
+                        .gap_2()
+                        .child(
+                            acl.declared_groups
+                                .iter()
+                                .map(|name| machine_text(name.clone()))
+                                .collect::<Vec<_>>(),
+                        )
+                        .into_element(),
+                );
+            }
+            if acl.groups_without_secret > 0 {
+                let count = acl.groups_without_secret.to_string();
+                lines.push(
+                    meta_text(fill(strings.acl_groups_missing, &[("count", &count)]))
+                        .into_element(),
+                );
+            }
+            lines
+        })
+        .collect();
     let forwards = plan
         .port_forwards
         .iter()
@@ -355,6 +425,26 @@ fn preview(store: Store) -> View {
             true,
         ))
         .child(row(store, |w| w.row_subnets, or_none(store, subnets), true))
+        .child(row(store, |w| w.row_routes, or_none(store, routes), true))
+        .child(row(
+            store,
+            |w| w.row_mapped_listeners,
+            or_none(store, mapped_listeners),
+            true,
+        ))
+        .child(row(
+            store,
+            |w| w.row_vpn_portal,
+            or_none(store, vpn_portal),
+            true,
+        ))
+        .child(row(
+            store,
+            |w| w.row_recv_limit,
+            or_none(store, recv_limit),
+            true,
+        ))
+        .child(row(store, |w| w.row_acl, or_none(store, acl), true))
         .child(row(
             store,
             |w| w.row_forwards,

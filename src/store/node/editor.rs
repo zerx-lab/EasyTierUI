@@ -11,12 +11,17 @@ use super::{
 };
 use crate::{
     core::{
+        acl::{AclConfig, GroupSecrets},
         net::{self, ListenerUrl},
         secret::Secret,
+        settings::{
+            DEFAULT_VPN_PORTAL_PORT, ForwardLineError, MappedListener, NodeFlags, PortForward,
+            VpnPortal,
+        },
     },
     profile::{
-        Encryption, Exposure, IpMode, MTU_RANGE, NetworkProfile, PortForward, ProfileId, Proto,
-        RelayWhitelist, Socks5,
+        Encryption, Exposure, IpMode, MTU_RANGE, NetworkProfile, ProfileId, RelayWhitelist, Socks5,
+        SubnetProxy, parse_route,
     },
 };
 
@@ -81,14 +86,12 @@ pub struct EditorDraft {
     pub mtu: String,
     /// The interface name as typed (empty: the system's choice).
     pub dev_name: String,
-    /// Prefer the lowest-latency route.
-    pub latency_first: bool,
-    /// Never hole-punch.
-    pub disable_p2p: bool,
-    /// Resolve peer hostnames through EasyTier's DNS.
-    pub accept_dns: bool,
-    /// Run the core on several threads.
-    pub multi_thread: bool,
+    /// The core's behavior switches.
+    pub flags: NodeFlags,
+    /// The most bytes per second the instance receives, as typed (empty: unlimited).
+    pub recv_limit: String,
+    /// Public addresses of this node's listeners to announce to peers, one per line.
+    pub mapped_listeners: String,
     /// Peers may route their internet traffic through this node.
     pub offers_exit_node: bool,
     /// Send this node's traffic through exit nodes.
@@ -97,8 +100,18 @@ pub struct EditorDraft {
     pub exit_nodes: String,
     /// Share subnets with the network.
     pub subnet_on: bool,
-    /// Subnets, one per line.
+    /// Subnets, one per line: `192.168.50.0/24` or `192.168.50.0/24->10.50.0.0/24` (shown to peers as the second).
     pub subnets: String,
+    /// Use the routes below instead of EasyTier's own (an empty list then means no routes at all).
+    pub routes_on: bool,
+    /// Manual routes, one per line (`192.168.0.0/16`).
+    pub routes: String,
+    /// Open the WireGuard VPN portal (listens on every interface).
+    pub vpn_portal_on: bool,
+    /// The addresses handed to WireGuard clients, as typed (`10.14.14.0/24`).
+    pub vpn_portal_cidr: String,
+    /// The portal's UDP port, as typed.
+    pub vpn_portal_port: String,
     /// Serve a SOCKS5 proxy.
     pub socks5_on: bool,
     /// The proxy's `address:port` (or just a port, on this device only).
@@ -115,6 +128,11 @@ pub struct EditorDraft {
     pub whitelist_only: bool,
     /// The networks to relay for, one pattern per line.
     pub whitelist: String,
+    /// The access-control section with the secrets of its declared groups; `None` is no access control. The secrets
+    /// are read from the keychain with the network secret ([`EditorDraft::apply_group_secrets`]).
+    pub acl: Option<AclConfig>,
+    /// The group secrets as the keychain gave them, to save only what changed.
+    pub base_group_secrets: GroupSecrets,
     /// Whether empty or invalid fields show their errors (set when a save was refused).
     pub show_errors: bool,
     /// The profile is being saved.
@@ -138,6 +156,38 @@ fn join_lines<T: ToString>(items: impl IntoIterator<Item = T>) -> String {
 }
 
 impl EditorDraft {
+    /// Takes the ACL group secrets the keychain answered with: they become the draft's and the baseline `save`
+    /// compares against. Group secrets typed since the draft opened are kept.
+    pub fn apply_group_secrets(&mut self, groups: GroupSecrets) {
+        self.base_group_secrets = groups.clone();
+        if let Some(config) = &mut self.acl
+            && config.group_secrets.is_empty()
+        {
+            config.group_secrets = groups;
+        }
+    }
+
+    /// The group secrets saving must write to the keychain: the declared groups' secrets when they differ from what
+    /// the keychain gave (an empty set deletes the entry), `None` when nothing changed or the keychain has not
+    /// answered yet.
+    pub fn group_secrets_to_save(&self) -> Option<GroupSecrets> {
+        if !self.secret_loaded || self.is_managed() {
+            return None;
+        }
+        let mut current = self
+            .acl
+            .as_ref()
+            .map(|config| config.group_secrets.clone())
+            .unwrap_or_default();
+        let declared = self
+            .acl
+            .as_ref()
+            .map(|config| config.acl.declared_groups.clone())
+            .unwrap_or_default();
+        current.retain_names(&declared);
+        (current != self.base_group_secrets).then_some(current)
+    }
+
     /// The form for `profile`; the secret is filled in when the keychain has answered.
     pub fn from_profile(profile: &NetworkProfile) -> Self {
         let (ip, ip_text) = match profile.ip {
@@ -167,28 +217,44 @@ impl EditorDraft {
             encryption: profile.encryption,
             mtu: profile.mtu.map(|mtu| mtu.to_string()).unwrap_or_default(),
             dev_name: profile.dev_name.clone().unwrap_or_default(),
-            latency_first: profile.latency_first,
-            disable_p2p: profile.disable_p2p,
-            accept_dns: profile.accept_dns,
-            multi_thread: profile.multi_thread,
+            flags: profile.flags,
+            recv_limit: profile
+                .instance_recv_bps_limit
+                .map(|limit| limit.to_string())
+                .unwrap_or_default(),
+            mapped_listeners: join_lines(profile.mapped_listeners.iter().map(|l| l.as_str())),
             offers_exit_node: profile.offers_exit_node,
             exit_nodes_on: !profile.exit_nodes.is_empty(),
             exit_nodes: join_lines(&profile.exit_nodes),
             subnet_on: !profile.subnet_proxy.is_empty(),
             subnets: join_lines(&profile.subnet_proxy),
+            routes_on: profile.manual_routes.is_some(),
+            routes: join_lines(profile.manual_routes.iter().flatten()),
+            vpn_portal_on: profile.vpn_portal.is_some(),
+            vpn_portal_cidr: profile
+                .vpn_portal
+                .map(|portal| portal.client_cidr.to_string())
+                .unwrap_or_default(),
+            vpn_portal_port: profile
+                .vpn_portal
+                .map_or(DEFAULT_VPN_PORTAL_PORT, |portal| portal.listen_port)
+                .to_string(),
             socks5_on: profile.socks5.is_some(),
             socks5: profile
                 .socks5
                 .map(|proxy| SocketAddr::new(proxy.host, proxy.port).to_string())
                 .unwrap_or_default(),
             forwards_on: !profile.port_forwards.is_empty(),
-            forwards: join_lines(profile.port_forwards.iter().map(|forward| {
-                format!("{} {} {}", forward.proto.name(), forward.bind, forward.dst)
-            })),
+            forwards: join_lines(&profile.port_forwards),
             relay_all_peer_rpc: profile.relay_all_peer_rpc,
             private_mode: profile.private_mode,
             whitelist_only,
             whitelist,
+            acl: profile.acl.clone().map(|acl| AclConfig {
+                acl,
+                group_secrets: GroupSecrets::default(),
+            }),
+            base_group_secrets: GroupSecrets::default(),
             show_errors: false,
             saving: false,
             failure: None,
@@ -262,10 +328,26 @@ impl EditorDraft {
         };
         let dev_name = self.dev_name.trim();
         profile.dev_name = (!dev_name.is_empty()).then(|| dev_name.to_owned());
-        profile.latency_first = self.latency_first;
-        profile.disable_p2p = self.disable_p2p;
-        profile.accept_dns = self.accept_dns;
-        profile.multi_thread = self.multi_thread;
+        profile.flags = self.flags;
+        let recv_limit = self.recv_limit.trim();
+        profile.instance_recv_bps_limit = if recv_limit.is_empty() {
+            None
+        } else if let Ok(limit) = recv_limit.parse::<u64>() {
+            Some(limit)
+        } else {
+            problems.push(FieldProblem::of(
+                Field::RecvLimit,
+                ProblemKind::MustBePositive,
+            ));
+            None
+        };
+        profile.mapped_listeners = Vec::new();
+        for (index, line) in entries(&self.mapped_listeners).enumerate() {
+            match MappedListener::parse(&format!("mapped_listeners[{index}]"), line) {
+                Ok(listener) => profile.mapped_listeners.push(listener),
+                Err(error) => problems.push(FieldProblem::from(&error)),
+            }
+        }
         profile.offers_exit_node = self.offers_exit_node;
         profile.exit_nodes = Vec::new();
         if self.exit_nodes_on {
@@ -279,9 +361,38 @@ impl EditorDraft {
         profile.subnet_proxy = Vec::new();
         if self.subnet_on {
             for (index, line) in entries(&self.subnets).enumerate() {
-                match net::parse_ipv4_subnet(&format!("subnet_proxy[{index}]"), line) {
+                match SubnetProxy::parse_line(&format!("subnet_proxy[{index}]"), line) {
                     Ok(subnet) => profile.subnet_proxy.push(subnet),
                     Err(error) => problems.push(FieldProblem::from(&error)),
+                }
+            }
+        }
+        profile.manual_routes = None;
+        if self.routes_on {
+            let mut routes = Vec::new();
+            for (index, line) in entries(&self.routes).enumerate() {
+                match parse_route(&format!("routes[{index}]"), line) {
+                    Ok(route) => routes.push(route),
+                    Err(error) => problems.push(FieldProblem::from(&error)),
+                }
+            }
+            profile.manual_routes = Some(routes);
+        }
+        profile.vpn_portal = None;
+        if self.vpn_portal_on {
+            let cidr =
+                net::parse_ipv4_subnet("vpn_portal.client_cidr", self.vpn_portal_cidr.trim());
+            let port = net::parse_port("vpn_portal.listen_port", &self.vpn_portal_port);
+            match (cidr, port) {
+                (Ok(client_cidr), Ok(listen_port)) => {
+                    profile.vpn_portal = Some(VpnPortal {
+                        client_cidr,
+                        listen_port,
+                    });
+                }
+                (cidr, port) => {
+                    problems.extend(cidr.err().iter().map(FieldProblem::from));
+                    problems.extend(port.err().iter().map(FieldProblem::from));
                 }
             }
         }
@@ -295,9 +406,16 @@ impl EditorDraft {
         profile.port_forwards = Vec::new();
         if self.forwards_on {
             for (index, line) in entries(&self.forwards).enumerate() {
-                match parse_forward(index, line) {
+                match PortForward::parse_line(&format!("port_forwards[{index}]"), line) {
                     Ok(forward) => profile.port_forwards.push(forward),
-                    Err(problem) => problems.push(problem),
+                    Err(ForwardLineError::Shape) => problems.push(FieldProblem::in_entry(
+                        Field::PortForwards,
+                        index.saturating_add(1),
+                        ProblemKind::ForwardShape,
+                    )),
+                    Err(ForwardLineError::Address(error)) => {
+                        problems.push(FieldProblem::from(&error));
+                    }
                 }
             }
         }
@@ -308,6 +426,7 @@ impl EditorDraft {
         } else {
             RelayWhitelist::Any
         };
+        profile.acl = self.acl.as_ref().map(|config| config.acl.clone());
         profile
     }
 
@@ -321,6 +440,16 @@ impl EditorDraft {
         let profile = self.assemble(&mut problems);
         for error in profile.problems() {
             let problem = FieldProblem::from(&error);
+            if !problems.contains(&problem) {
+                problems.push(problem);
+            }
+        }
+        if self.secret_loaded
+            && !self.is_managed()
+            && let Some(config) = &self.acl
+            && let Err(error) = config.check()
+        {
+            let problem = FieldProblem::of(Field::Acl, ProblemKind::Acl(error));
             if !problems.contains(&problem) {
                 problems.push(problem);
             }
@@ -370,35 +499,10 @@ fn parse_socks5(text: &str) -> Result<Socks5, FieldProblem> {
         .map_err(|error| FieldProblem::from(&error))
 }
 
-/// `tcp 127.0.0.1:8080 10.144.144.2:80`.
-fn parse_forward(index: usize, line: &str) -> Result<PortForward, FieldProblem> {
-    let entry = index.saturating_add(1);
-    let shape = FieldProblem::in_entry(Field::PortForwards, entry, ProblemKind::ForwardShape);
-    let mut parts = line.split_whitespace();
-    let (Some(proto), Some(bind), Some(dst), None) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
-        return Err(shape);
-    };
-    let proto = match proto.to_ascii_lowercase().as_str() {
-        "tcp" => Proto::Tcp,
-        "udp" => Proto::Udp,
-        _ => return Err(shape),
-    };
-    let address = |part: &str, which: &str| -> Result<SocketAddr, FieldProblem> {
-        net::parse_socket_addr(&format!("port_forwards[{index}].{which}"), part)
-            .map_err(|error| FieldProblem::from(&error))
-    };
-    Ok(PortForward {
-        proto,
-        bind: address(bind, "bind")?,
-        dst: address(dst, "dst")?,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{core::settings::Proto, profile::testing};
 
     fn profile() -> NetworkProfile {
         let id = ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap();
@@ -416,7 +520,7 @@ mod tests {
         full.mtu = Some(1400);
         full.dev_name = Some("et0".to_owned());
         full.exit_nodes = vec!["10.144.144.9".parse().unwrap()];
-        full.subnet_proxy = vec!["192.168.50.0/24".parse().unwrap()];
+        full.subnet_proxy = vec![SubnetProxy::plain("192.168.50.0/24".parse().unwrap())];
         full.socks5 = Some(Socks5::local(1080));
         full.port_forwards = vec![PortForward {
             proto: Proto::Udp,
@@ -432,6 +536,82 @@ mod tests {
             EditorDraft::from_profile(&profile()).build().unwrap(),
             profile()
         );
+    }
+
+    #[test]
+    fn a_form_made_from_a_profile_with_every_field_builds_the_same_profile() {
+        let (full, groups) = testing::full_profile().unwrap();
+        let mut form = EditorDraft::from_profile(&full);
+        assert_eq!(form.vpn_portal_port, "22022");
+        assert_eq!(form.recv_limit, "1048576");
+        assert_eq!(form.routes, "192.168.0.0/16");
+        assert_eq!(form.subnets, "192.168.50.0/24->10.50.0.0/24");
+        assert_eq!(form.forwards, "tcp 127.0.0.1:8080 10.144.144.2:80");
+        assert_eq!(form.build().unwrap(), full);
+
+        // Once the keychain answered, the group secrets are checked and saved only when they changed.
+        form.secret_loaded = true;
+        form.apply_group_secrets(groups.clone());
+        assert_eq!(form.build().unwrap(), full);
+        assert_eq!(form.group_secrets_to_save(), None);
+        form.acl
+            .as_mut()
+            .unwrap()
+            .group_secrets
+            .insert("admins", Secret::new("a-new-secret"));
+        let saved = form.group_secrets_to_save().unwrap();
+        assert_eq!(saved.get("admins"), Some(&Secret::new("a-new-secret")));
+        // Dropping the ACL deletes the entry.
+        form.acl = None;
+        assert_eq!(form.group_secrets_to_save(), Some(GroupSecrets::default()));
+        assert_eq!(form.build().unwrap().acl, None);
+    }
+
+    #[test]
+    fn a_declared_group_without_a_secret_is_one_acl_problem() {
+        let (full, _) = testing::full_profile().unwrap();
+        let mut form = EditorDraft::from_profile(&full);
+        // Not asked yet: the keychain may still hold it.
+        assert!(form.build().is_ok());
+        form.secret_loaded = true;
+        form.apply_group_secrets(GroupSecrets::default());
+        let problems = form.problems();
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].field, Field::Acl);
+        assert!(matches!(problems[0].kind, ProblemKind::Acl(_)));
+    }
+
+    #[test]
+    fn new_fields_report_their_problems() {
+        let mut form = EditorDraft::from_profile(&profile());
+        form.recv_limit = "fast".to_owned();
+        form.mapped_listeners = "tcp://203.0.113.5:11223\nhttps://x.example.com".to_owned();
+        form.routes_on = true;
+        form.routes = "10.0.0.0/8\n10.1.2.3/8".to_owned();
+        form.vpn_portal_on = true;
+        form.vpn_portal_cidr = "10.14.14.7/24".to_owned();
+        form.vpn_portal_port = "0".to_owned();
+        form.subnet_on = true;
+        form.subnets = "192.168.50.0/24->10.50.0.0/16".to_owned();
+        let problems = form.problems();
+        for expected in [
+            FieldProblem::of(Field::RecvLimit, ProblemKind::MustBePositive),
+            FieldProblem::in_entry(Field::MappedListeners, 2, ProblemKind::ConnectorOnly),
+            FieldProblem::in_entry(Field::Routes, 2, ProblemKind::HostBits),
+            FieldProblem::of(Field::VpnPortalCidr, ProblemKind::HostBits),
+            FieldProblem::of(Field::VpnPortalPort, ProblemKind::BadPort),
+            FieldProblem::in_entry(Field::SubnetProxy, 1, ProblemKind::MappedSize),
+        ] {
+            assert!(problems.contains(&expected), "{expected:?} in {problems:?}");
+        }
+        // An empty routes list is valid when manual routes are on: no routes at all.
+        let mut form = EditorDraft::from_profile(&profile());
+        form.routes_on = true;
+        assert_eq!(form.build().unwrap().manual_routes, Some(Vec::new()));
+        // Text of a switched-off feature is ignored.
+        form.routes_on = false;
+        form.routes = "garbage".to_owned();
+        assert_eq!(form.build().unwrap().manual_routes, None);
     }
 
     #[test]

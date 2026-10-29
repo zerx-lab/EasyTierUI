@@ -120,6 +120,12 @@ pub(super) fn field_label(words: &'static SharedStrings, field: Field) -> &'stat
         Field::ExitNodes => words.field_exit_nodes,
         Field::Socks5 => words.field_socks5,
         Field::PortForwards => words.field_port_forwards,
+        Field::RecvLimit => words.field_recv_limit,
+        Field::MappedListeners => words.field_mapped_listeners,
+        Field::Routes => words.field_routes,
+        Field::VpnPortalCidr => words.field_vpn_portal_cidr,
+        Field::VpnPortalPort => words.field_vpn_portal_port,
+        Field::Acl => words.field_acl,
         Field::RelayWhitelist => words.field_relay_whitelist,
         Field::ConfigServer => words.field_config_server,
         Field::Import => words.field_import,
@@ -159,6 +165,9 @@ pub(super) fn reason_text(words: &'static SharedStrings, kind: ProblemKind) -> S
         ProblemKind::Reserved => words.reason_reserved.to_owned(),
         ProblemKind::ForwardShape => words.reason_forward_shape.to_owned(),
         ProblemKind::ConfigServerShape => words.reason_config_server_shape.to_owned(),
+        ProblemKind::MappedSize => words.reason_mapped_size.to_owned(),
+        ProblemKind::MustBePositive => words.reason_must_be_positive.to_owned(),
+        ProblemKind::Acl(_) => words.reason_acl.to_owned(),
         ProblemKind::Other => words.reason_other.to_owned(),
     }
 }
@@ -325,6 +334,14 @@ pub(super) fn exposure_item(store: Store, exposure: &Exposure) -> View {
         Exposure::PrivateModeOff => (|w| w.exposure_private_mode_off, None),
         Exposure::RelaysAllPeerRpc => (|w| w.exposure_relays_all_rpc, None),
         Exposure::WideRelayWhitelist => (|w| w.exposure_wide_whitelist, None),
+        Exposure::VpnPortal(portal) => (
+            |w| w.exposure_vpn_portal,
+            Some(format!(
+                "{} · UDP {}",
+                portal.client_cidr, portal.listen_port
+            )),
+        ),
+        Exposure::ForwardBySystem => (|w| w.exposure_forward_by_system, None),
     };
     view()
         .gap_1()

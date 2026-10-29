@@ -1,6 +1,7 @@
 //! One module per page, the same pages on every platform. A page asks the store what this platform and target can
-//! do; a feature that cannot run here shows a Capability Notice with the remote alternative.
+//! do; where neither this device nor a server's API can do it, it shows a Capability Notice with the alternative.
 
+mod config;
 mod console;
 mod host;
 mod node;
@@ -12,8 +13,6 @@ pub use welcome::welcome;
 
 use crate::{
     components::capability_notice,
-    core::platform::Limitation,
-    i18n::Pick,
     store::{Page, Store},
 };
 
@@ -54,26 +53,12 @@ pub fn overlays(store: Store) -> View {
         .child(host::overlays(store))
 }
 
-/// The notice for a feature this device cannot run, with the page that does it remotely.
-fn unavailable(store: Store, limitation: Limitation) -> View {
-    let (message, action, alternative): (Pick, Pick, Page) = match limitation {
-        Limitation::BrowserCannotJoinNetwork => (
-            |s| s.notice_browser_node,
-            |s| s.notice_browser_node_action,
-            Page::Machines,
-        ),
-        Limitation::BrowserCannotRunPrograms => (
-            |s| s.notice_browser_host,
-            |s| s.notice_browser_host_action,
-            Page::Deployment,
-        ),
-        Limitation::MobileCannotHost => (
-            |s| s.notice_mobile_host,
-            |s| s.notice_mobile_host_action,
-            Page::Deployment,
-        ),
-    };
-    capability_notice(store.tr(message), store.tr(action), move || {
-        store.open(alternative)
-    })
+/// The notice on a phone or tablet, which can neither host a control plane nor reach one's process through an API:
+/// it leads to the deployment files.
+fn mobile_host_notice(store: Store) -> View {
+    capability_notice(
+        store.tr(|s| s.notice_mobile_host),
+        store.tr(|s| s.notice_mobile_host_action),
+        move || store.open(Page::Deployment),
+    )
 }

@@ -5,8 +5,9 @@ edition = "2024"
 publish = false
 
 [workspace]
-# The EasyTier library bridge for the mobile builds (its own lint table: UniFFI generates `unsafe`).
-members = ["crates/easytier-mobile"]
+# Bridges with their own lint tables: the EasyTier library for the mobile builds (UniFFI generates `unsafe`), and the
+# desktops' tray / window / login-item integration NSH has no API for (AppKit and Win32 calls, the user's decision).
+members = ["crates/easytier-mobile", "crates/desktop-shell"]
 
 # Panic-free, unsafe-free Rust (AGENTS.md "Rust safety"). `clippy.toml` lets
 # test code panic; `cargo clippy --all-targets -- -D warnings` turns every
@@ -79,12 +80,17 @@ zune-jpeg = { version = "0.5", default-features = false, features = ["std"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 getrandom = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
+# The user's preferred UI language: NSH's `locale()` is the region format, which a packaged macOS / iOS app
+# without zh localizations resolves to `en_CN` even when the system language is Chinese.
+sys-locale = "0.3"
 
 # The desktops run EasyTier's official programs: data directory, release zips, the OS keychain, and the
 # administrator prompt that installs a TUN node as an OS service.
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 dirs = "6"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# The tray icon, closing to the tray, starting hidden, one instance, the login item (AGENTS.md "Desktop shell").
+desktop-shell = { path = "crates/desktop-shell" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nsh-platform-linux = { version = "0.3.0", default-features = false }

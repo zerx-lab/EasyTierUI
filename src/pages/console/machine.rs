@@ -1,26 +1,33 @@
-//! The machine drawer: one machine's facts, its networks with their actions, and the peers of one of them. Opened by
-//! a row of the machine table, or from a network's menu on the Networks page.
+//! The machine drawer: one machine's facts, its networks with their actions, and the views of one of its running
+//! networks (peers, node, routes, relay, stats, connections, forwarding, access) and of its core (logs). Opened by a
+//! row of the machine table, or from a network's menu on the Networks page.
+
+use std::rc::Rc;
 
 use nsh_core::prelude::*;
 use uuid::Uuid;
 
 use super::{
     format::{format_ago, format_bytes, format_latency, format_loss},
+    inspect::{self, feed_view, toolbar},
     machines::clock,
     networks::{NetworkItem, Placement, drawer_columns, load_failed, network_row},
-    tr,
+    runtime, tr,
 };
 use crate::{
     components::{
         ButtonKind, CalloutKind, CopyLabels, Icon, Lamp, SelectOption, Thresholds, action_button,
         callout, column, columns, data_table, dialog_footer, drawer, empty_panel, fact, fact_mono,
-        icon_button, kv_grid, meta_text, segmented, select, status_chip, table_row, threshold_bar,
+        kv_grid, meta_text, segmented_inline, select, status_chip, table_row, threshold_bar,
     },
     core::{
         remote::{Machine, PeerLinks, RemoteError},
         target::TargetId,
     },
-    store::{Store, console::MachineTab},
+    store::{
+        Store,
+        console::{Feed, MachineTab},
+    },
 };
 
 /// What the drawer's body shows for the machine.
@@ -34,17 +41,6 @@ enum Detail {
 /// What a list inside the drawer shows.
 #[derive(Debug, Clone, PartialEq)]
 enum Kind {
-    Loading,
-    Failed(RemoteError),
-    Empty,
-    Rows,
-}
-
-/// What the peers tab shows.
-#[derive(Debug, Clone, PartialEq)]
-enum PeersKind {
-    NoRunning,
-    Pick,
     Loading,
     Failed(RemoteError),
     Empty,
@@ -101,28 +97,7 @@ pub(super) fn drawer_view(store: Store) -> impl IntoElement {
         },
     )
     .meta(move || facts(store, machine, now))
-    .tabs(move || {
-        let id = store.current_target_id();
-        segmented(
-            tr(store, |c| c.tabs_label),
-            vec![
-                SelectOption::new(
-                    MachineTab::Networks.id(),
-                    store.strings().console.tab_networks,
-                ),
-                SelectOption::new(MachineTab::Peers.id(), store.strings().console.tab_peers),
-            ],
-            move || SharedString::from(console.machine_tab().id()),
-            move |tab| {
-                if let (Some(tab), Some(mid)) =
-                    (MachineTab::from_id(tab), console.selected_machine(id))
-                {
-                    console.show_machine_tab(id, mid, tab);
-                }
-            },
-            "machine-tab",
-        )
-    })
+    .tabs(move || tab_switcher(store))
     .body(move || {
         let id = store.current_target_id();
         let Some(mid) = console.selected_machine(id) else {
@@ -202,17 +177,116 @@ fn body(store: Store, id: TargetId, mid: Uuid) -> AnyElement {
     })
 }
 
+/// The tab switcher: a strip for the views used most and a menu beside it for the others, so ten tabs fit the
+/// drawer's width (the strip and the menu wrap onto two lines on a phone).
+fn tab_switcher(store: Store) -> View {
+    let console = store.console();
+    let label = move |tab: MachineTab| -> &'static str {
+        let words = store.strings().console;
+        let inspect = store.strings().console_inspect;
+        match tab {
+            MachineTab::Networks => words.tab_networks,
+            MachineTab::Peers => words.tab_peers,
+            MachineTab::Node => inspect.tab_node,
+            MachineTab::Routes => inspect.tab_routes,
+            MachineTab::Relay => inspect.tab_relay,
+            MachineTab::Stats => inspect.tab_stats,
+            MachineTab::Connections => inspect.tab_connections,
+            MachineTab::Forwarding => inspect.tab_forwarding,
+            MachineTab::Access => inspect.tab_access,
+            MachineTab::Logs => inspect.tab_logs,
+        }
+    };
+    let show = move |id: &str| {
+        if let Some(tab) = MachineTab::from_id(id) {
+            console.show_machine_tab(tab);
+        }
+    };
+    let mut more = vec![SelectOption::new(
+        "",
+        store.strings().console_inspect.tabs_more,
+    )];
+    more.extend(
+        MachineTab::MORE
+            .into_iter()
+            .map(|tab| SelectOption::new(tab.id(), label(tab))),
+    );
+    view()
+        .flex_row()
+        .flex_wrap()
+        .items_center()
+        .gap_2()
+        .child(segmented_inline(
+            tr(store, |c| c.tabs_label),
+            MachineTab::MAIN
+                .into_iter()
+                .map(|tab| SelectOption::new(tab.id(), label(tab)))
+                .collect(),
+            move || SharedString::from(console.machine_tab().id()),
+            show,
+            "machine-tab",
+        ))
+        .child(
+            select(
+                store.tr(|s| s.console_inspect.tabs_more_label),
+                more,
+                move || {
+                    let tab = console.machine_tab();
+                    SharedString::from(if MachineTab::MORE.contains(&tab) {
+                        tab.id()
+                    } else {
+                        ""
+                    })
+                },
+                show,
+            )
+            .inline()
+            .test_id("machine-tab-more")
+            .build(),
+        )
+}
+
 /// The part of the body the tab shows.
 fn tab(store: Store, id: TargetId, mid: Uuid) -> AnyElement {
     let console = store.console();
-    dynamic(move || match console.machine_tab() {
-        MachineTab::Networks => untracked(|| networks_tab(store, id, mid)),
-        MachineTab::Peers => untracked(|| peers_tab(store, id, mid)),
+    dynamic(move || {
+        let tab = console.machine_tab();
+        untracked(|| tab_content(store, id, mid, tab))
     })
 }
 
+/// What `tab` shows for machine `mid`: the per-network tabs inside the choice of the machine's running network.
+pub(super) fn tab_content(store: Store, id: TargetId, mid: Uuid, tab: MachineTab) -> AnyElement {
+    match tab {
+        MachineTab::Networks => networks_tab(store, id, mid),
+        MachineTab::Peers => peers_tab(store, id, mid),
+        MachineTab::Node => instance_scope(store, id, mid, move |instance| {
+            inspect::node_tab(store, id, mid, instance)
+        }),
+        MachineTab::Routes => instance_scope(store, id, mid, move |instance| {
+            inspect::routes_tab(store, id, mid, instance)
+        }),
+        MachineTab::Relay => instance_scope(store, id, mid, move |instance| {
+            inspect::relay_tab(store, id, mid, instance)
+        }),
+        MachineTab::Stats => instance_scope(store, id, mid, move |instance| {
+            inspect::stats_tab(store, id, mid, instance)
+        }),
+        MachineTab::Connections => instance_scope(store, id, mid, move |instance| {
+            runtime::connections_tab(store, id, mid, instance)
+        }),
+        MachineTab::Forwarding => instance_scope(store, id, mid, move |instance| {
+            runtime::forwarding_tab(store, id, mid, instance)
+        }),
+        MachineTab::Access => instance_scope(store, id, mid, move |instance| {
+            runtime::access_tab(store, id, mid, instance)
+        }),
+        MachineTab::Logs => runtime::logs_tab(store, id, mid),
+    }
+}
+
 /// The machine's networks as a table with their actions.
-fn networks_tab(store: Store, id: TargetId, mid: Uuid) -> AnyElement {
+pub(super) fn networks_tab(store: Store, id: TargetId, mid: Uuid) -> AnyElement {
     let console = store.console();
     let kind = computed(move || {
         let feed = console.networks_of(id, mid);
@@ -293,9 +367,26 @@ fn networks_tab(store: Store, id: TargetId, mid: Uuid) -> AnyElement {
         .into_element()
 }
 
-/// The peers of one of the machine's running networks: which network, refresh, and the table.
-fn peers_tab(store: Store, id: TargetId, mid: Uuid) -> AnyElement {
+/// What a per-network tab shows before it has a network to show.
+#[derive(Debug, Clone, PartialEq)]
+enum ScopeKind {
+    Loading,
+    Failed(RemoteError),
+    NoRunning,
+    Ready,
+}
+
+/// The part of the machine's running networks the per-network tabs share: which network they are about, and the
+/// words for there being none to show. `body(instance)` is the tab itself; it is built again only when the network
+/// it is about changes, never when a poll reads the same networks again.
+pub(super) fn instance_scope(
+    store: Store,
+    id: TargetId,
+    mid: Uuid,
+    body: impl Fn(Uuid) -> AnyElement + 'static,
+) -> AnyElement {
     let console = store.console();
+    let body = Rc::new(body);
     let running = computed(move || {
         console
             .networks_of(id, mid)
@@ -306,71 +397,53 @@ fn peers_tab(store: Store, id: TargetId, mid: Uuid) -> AnyElement {
             .map(|network| (network.instance_id, network.name))
             .collect::<Vec<_>>()
     });
-    let open_here = move || console.peers().filter(|open| open.machine == mid);
+    // The network picked by hand while it still runs, else the first one that runs.
+    let chosen = computed(move || {
+        let running = running.get();
+        console
+            .scope_instance(id, mid)
+            .filter(|picked| running.iter().any(|(instance, _)| instance == picked))
+            .or_else(|| running.first().map(|(instance, _)| *instance))
+    });
     let kind = computed(move || {
-        let Some(open) = open_here() else {
-            return if running.with(|running| running.is_empty())
-                && console.networks_of(id, mid).value.is_some()
-            {
-                PeersKind::NoRunning
-            } else {
-                PeersKind::Pick
-            };
-        };
-        match open.peers.value {
-            None => match open.peers.error {
-                Some(error) => PeersKind::Failed(error),
-                None => PeersKind::Loading,
+        let feed = console.networks_of(id, mid);
+        match feed.value {
+            None => match feed.error {
+                Some(error) => ScopeKind::Failed(error),
+                None => ScopeKind::Loading,
             },
-            Some(peers) if peers.is_empty() => PeersKind::Empty,
-            Some(_) => PeersKind::Rows,
+            Some(_) if running.with(|running| running.is_empty()) => ScopeKind::NoRunning,
+            Some(_) => ScopeKind::Ready,
         }
     });
-    let picker = dynamic(move || {
-        let options = running.get();
-        if options.is_empty() {
-            return None;
+    dynamic(move || match kind.get() {
+        ScopeKind::Loading => meta_text(store.tr(|s| s.common.loading)).into_element(),
+        ScopeKind::Failed(error) => {
+            untracked(|| load_failed(store, &error, move || console.refresh_networks(id, mid)))
         }
-        Some(untracked(|| network_picker(store, id, mid, options)))
-    });
-    view()
-        .gap_4()
-        .child(
-            view()
-                .flex_row()
-                .items_end()
-                .gap_2()
-                .child(view().flex_1().child(picker))
-                .child(
-                    icon_button(Icon::Refresh, store.tr(|s| s.common.refresh), move || {
-                        console.refresh_peers();
-                    })
-                    .test_id("machine-peers-refresh"),
-                ),
+        ScopeKind::NoRunning => empty_panel(
+            Icon::Peers,
+            tr(store, |c| c.credentials_no_network_title),
+            store.tr(|s| s.console_inspect.scope_no_network_body),
+            None,
         )
-        .child(dynamic(move || match kind.get() {
-            PeersKind::NoRunning => empty_panel(
-                Icon::Peers,
-                tr(store, |c| c.credentials_no_network_title),
-                tr(store, |c| c.peers_no_network_body),
-                None,
-            )
-            .into_element(),
-            PeersKind::Pick => meta_text(tr(store, |c| c.peers_pick_network)).into_element(),
-            PeersKind::Loading => meta_text(store.tr(|s| s.common.loading)).into_element(),
-            PeersKind::Failed(error) => {
-                untracked(|| load_failed(store, &error, move || console.refresh_peers()))
-            }
-            PeersKind::Empty => empty_panel(
-                Icon::Peers,
-                tr(store, |c| c.peers_empty_title),
-                tr(store, |c| c.peers_empty_body),
-                None,
-            )
-            .into_element(),
-            PeersKind::Rows => untracked(|| peers_table(store, mid)),
-        }))
-        .into_element()
+        .into_element(),
+        ScopeKind::Ready => {
+            let body = body.clone();
+            untracked(|| {
+                view()
+                    .gap_4()
+                    .child(dynamic(move || {
+                        let options = running.get();
+                        untracked(|| network_picker(store, id, mid, chosen, options))
+                    }))
+                    .child(dynamic(move || {
+                        chosen.get().map(|instance| untracked(|| body(instance)))
+                    }))
+                    .into_element()
+            })
+        }
+    })
 }
 
 /// The choice among the machine's running networks.
@@ -378,42 +451,28 @@ fn network_picker(
     store: Store,
     id: TargetId,
     mid: Uuid,
+    chosen: Memo<Option<Uuid>>,
     networks: Vec<(Uuid, String)>,
 ) -> AnyElement {
     let console = store.console();
-    let mut options = vec![SelectOption::new(
-        "",
-        store.strings().console.credentials_choose_network,
-    )];
-    options.extend(
-        networks
-            .iter()
-            .map(|(instance, name)| SelectOption::new(instance.to_string(), name.clone())),
-    );
+    let options = networks
+        .into_iter()
+        .map(|(instance, name)| SelectOption::new(instance.to_string(), name))
+        .collect();
     select(
         tr(store, |c| c.credentials_network),
         options,
         move || {
             SharedString::from(
-                console
-                    .peers()
-                    .filter(|open| open.machine == mid)
-                    .map(|open| open.instance.to_string())
+                chosen
+                    .get()
+                    .map(|chosen| chosen.to_string())
                     .unwrap_or_default(),
             )
         },
         move |value| {
-            let Ok(instance) = Uuid::parse_str(value) else {
-                return;
-            };
-            if let Some((_, name)) = networks.iter().find(|(known, _)| *known == instance) {
-                let host = console
-                    .machines(id)
-                    .value
-                    .and_then(|machines| machines.into_iter().find(|machine| machine.id == mid))
-                    .map(|machine| machine.hostname)
-                    .unwrap_or_default();
-                console.open_peers(id, mid, instance, name.clone(), host);
+            if let Ok(instance) = Uuid::parse_str(value) {
+                console.pick_scope(id, mid, instance);
             }
         },
     )
@@ -422,9 +481,57 @@ fn network_picker(
     .into_element()
 }
 
-/// The peers of the open list as a table.
-fn peers_table(store: Store, mid: Uuid) -> AnyElement {
+/// The peers of one of the machine's running networks: which network, refresh, and the table.
+pub(super) fn peers_tab(store: Store, id: TargetId, mid: Uuid) -> AnyElement {
+    instance_scope(store, id, mid, move |instance| {
+        peers_body(store, id, mid, instance)
+    })
+}
+
+/// The peer list of network `instance`: when it was read, refresh, and the table.
+fn peers_body(store: Store, id: TargetId, mid: Uuid, instance: Uuid) -> AnyElement {
     let console = store.console();
+    console.show_peers_of(id, mid, instance);
+    let feed = move || {
+        console
+            .peers()
+            .filter(|open| open.machine == mid && open.instance == instance)
+            .map(|open| open.peers)
+            .unwrap_or_default()
+    };
+    let refresh = move || console.refresh_peers();
+    view()
+        .gap_4()
+        .child(toolbar(
+            store,
+            move || feed().read_at_ms,
+            refresh,
+            "machine-peers-refresh",
+        ))
+        .child(feed_view(
+            store,
+            feed,
+            |peers: &Vec<PeerLinks>| peers.is_empty(),
+            refresh,
+            move || {
+                empty_panel(
+                    Icon::Peers,
+                    tr(store, |c| c.peers_empty_title),
+                    tr(store, |c| c.peers_empty_body),
+                    None,
+                )
+                .into_element()
+            },
+            move || peers_table(store, feed),
+        ))
+        .into_element()
+}
+
+/// The peers of the open list as a table.
+fn peers_table(
+    store: Store,
+    feed: impl Fn() -> Feed<Vec<PeerLinks>> + Copy + 'static,
+) -> AnyElement {
     let cols = columns(vec![
         column(tr(store, |c| c.col_peer)).width(88.0).mono(),
         column(tr(store, |c| c.col_route)).width(144.0),
@@ -448,13 +555,7 @@ fn peers_table(store: Store, mid: Uuid) -> AnyElement {
     let rows_columns = cols.clone();
     data_table(&cols)
         .body(each(
-            move || {
-                console
-                    .peers()
-                    .filter(|open| open.machine == mid)
-                    .and_then(|open| open.peers.value)
-                    .unwrap_or_default()
-            },
+            move || feed().value.unwrap_or_default(),
             |peer: &PeerLinks| peer.peer_id,
             move |peer, _| peer_row(store, &rows_columns, peer),
         ))

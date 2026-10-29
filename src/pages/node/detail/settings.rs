@@ -16,8 +16,10 @@ use crate::{
     core::{
         net::BASE_PORT,
         secret::{Secret, Strength},
+        settings::DEFAULT_VPN_PORTAL_PORT,
     },
-    i18n::node::DetailStrings,
+    i18n::{Strings, node::DetailStrings},
+    pages::config::{acl_editor, flag_switches},
     profile::{DEFAULT_MTU, Encryption, Exposure, ProfileId},
     store::{
         Store,
@@ -175,19 +177,22 @@ pub(super) fn tab(store: Store, id: ProfileId, managed: bool) -> View {
         }))
         .child(general(form))
         .child(connection(form))
-        .child((!managed).then(|| advanced(form)))
+        .child((!managed).then(|| flags(form)))
+        .child((!managed).then(|| sharing(form)))
+        .child((!managed).then(|| relaying(form)))
+        .child((!managed).then(|| access(form)))
         .child(remove(form, id))
 }
 
 /// A section: its heading over a hairline, then its fields 16 pt apart.
-fn section(store: Store, label: fn(&'static DetailStrings) -> &'static str) -> View {
+fn section(store: Store, label: fn(&'static Strings) -> &'static str) -> View {
     view().gap_4().child(
         view()
             .pb_2()
             .border_b_1()
             .border_color(move || theme().border)
             .child(
-                body_text(move || label(store.strings().node.detail))
+                body_text(move || label(store.strings()))
                     .font_weight(FontWeight::MEDIUM)
                     .role(AccessibilityRole::Header)
                     .text_color(move || theme().foreground),
@@ -200,7 +205,7 @@ fn section(store: Store, label: fn(&'static DetailStrings) -> &'static str) -> V
 /// Name, network name, secret and hostname.
 fn general(form: Form) -> View {
     let Form { store, node, .. } = form;
-    let mut column = section(store, |d| d.section_general)
+    let mut column = section(store, |s| s.node.detail.section_general)
         .child(
             form.open_text(
                 store.tr(|s| s.node.shared.field_name),
@@ -324,7 +329,7 @@ fn encryption_name(words: &'static DetailStrings, encryption: Encryption) -> &'s
 /// Address, peers, listeners, TUN, encryption, MTU and interface name.
 fn connection(form: Form) -> View {
     let Form { store, node, .. } = form;
-    let mut column = section(store, |d| d.section_connection);
+    let mut column = section(store, |s| s.node.detail.section_connection);
     if !form.managed {
         let words = store.strings().node.detail;
         let mut options = vec![
@@ -406,20 +411,34 @@ fn connection(form: Form) -> View {
             listeners,
         ));
     } else {
-        column = column.child(
-            form.gated(
-                form.toggle(
-                    store.tr(|s| s.node.detail.listeners_switch),
+        column = column
+            .child(
+                form.gated(
+                    form.toggle(
+                        store.tr(|s| s.node.detail.listeners_switch),
+                        |draft| draft.listeners_on,
+                        |draft, on| draft.listeners_on = on,
+                        "detail-listeners-on",
+                    )
+                    .description(store.tr(|s| s.node.detail.listeners_switch_help)),
                     |draft| draft.listeners_on,
-                    |draft, on| draft.listeners_on = on,
-                    "detail-listeners-on",
+                    listeners,
+                ),
+            )
+            .child(
+                form.text(
+                    store.tr(|s| s.config.mapped_listeners),
+                    |draft| draft.mapped_listeners.clone(),
+                    |draft, text| draft.mapped_listeners = text.to_owned(),
+                    ProblemField::MappedListeners,
+                    "detail-mapped-listeners",
                 )
-                .description(store.tr(|s| s.node.detail.listeners_switch_help)),
-                |draft| draft.listeners_on,
-                listeners,
-            ),
-        );
-        column = column.child(tun(form));
+                .multiline(3)
+                .mono()
+                .placeholder("tcp://203.0.113.5:11010")
+                .helper(store.tr(|s| s.config.mapped_listeners_help)),
+            )
+            .child(tun(form));
     }
     column
         .child(encryption(form))
@@ -512,11 +531,26 @@ fn encryption(form: Form) -> View {
         }))
 }
 
-// ----- Advanced -----
+// ----- Feature switches -----
 
-/// Routing and exposure options. Not shown for a managed network.
-fn advanced(form: Form) -> View {
+/// The core's behavior switches, grouped by what they are about. Not shown for a managed network.
+fn flags(form: Form) -> View {
     let Form { store, node, .. } = form;
+    section(store, |s| s.config.section_flags).child(flag_switches(
+        store,
+        move || form.read(|draft| draft.flags),
+        move |flag, on| node.edit_editor(|draft| flag.set(&mut draft.flags, on)),
+        form.managed,
+        "detail",
+    ))
+}
+
+// ----- Sharing and routing -----
+
+/// What this node offers or uses beyond its own traffic: exit nodes, subnets, SOCKS5, port forwards, the VPN portal,
+/// manual routes and the receive limit. Not shown for a managed network.
+fn sharing(form: Form) -> View {
+    let Form { store, .. } = form;
     let shared = |pick: fn(&'static crate::i18n::node::SharedStrings) -> &'static str| {
         move || pick(store.strings().node.shared)
     };
@@ -546,7 +580,7 @@ fn advanced(form: Form) -> View {
             )
             .multiline(3)
             .mono()
-            .placeholder("192.168.50.0/24")
+            .placeholder("192.168.50.0/24->10.50.0.0/24")
             .helper(store.tr(|s| s.node.detail.subnets_help)),
         )
     };
@@ -581,84 +615,54 @@ fn advanced(form: Form) -> View {
                 .multiline(3)
                 .mono()
                 .placeholder("tcp 127.0.0.1:8080 10.144.144.2:80")
-                .helper(store.tr(|s| s.node.detail.forwards_help)),
+                .helper(store.tr(|s| s.config.port_forwards_help)),
             )
             .child(form.warnings(|exposure| {
                 matches!(exposure, Exposure::ForwardsPort { public: true, .. })
             }))
     };
-    let whitelist = view()
-        .gap_2()
-        .child(segmented(
-            store.tr(|s| s.node.detail.whitelist_label),
-            vec![
-                SelectOption::new("any", store.strings().node.detail.whitelist_any),
-                SelectOption::new("only", store.strings().node.detail.whitelist_only),
-            ],
-            move || {
-                SharedString::from(if form.read(|draft| draft.whitelist_only) {
-                    "only"
-                } else {
-                    "any"
-                })
-            },
-            move |picked| node.edit_editor(|draft| draft.whitelist_only = picked == "only"),
-            "detail-whitelist-mode",
-        ))
-        .child(when(
-            move || form.read(|draft| draft.whitelist_only),
-            move || {
+    let vpn_portal = move || {
+        view()
+            .gap_4()
+            .child(
                 form.text(
-                    store.tr(|s| s.node.shared.field_relay_whitelist),
-                    |draft| draft.whitelist.clone(),
-                    |draft, text| draft.whitelist = text.to_owned(),
-                    ProblemField::RelayWhitelist,
-                    "detail-whitelist",
+                    store.tr(|s| s.config.vpn_portal_cidr),
+                    |draft| draft.vpn_portal_cidr.clone(),
+                    |draft, text| draft.vpn_portal_cidr = text.to_owned(),
+                    ProblemField::VpnPortalCidr,
+                    "detail-vpn-portal-cidr",
                 )
-                .multiline(3)
                 .mono()
-                .placeholder("team-*")
-                .helper(store.tr(|s| s.node.detail.whitelist_help))
-            },
-        ))
-        .child(form.warnings(|exposure| matches!(exposure, Exposure::WideRelayWhitelist)));
-    section(store, |d| d.section_advanced)
-        .child(
-            form.toggle(
-                store.tr(|s| s.node.detail.latency_first),
-                |draft| draft.latency_first,
-                |draft, on| draft.latency_first = on,
-                "detail-latency-first",
+                .placeholder("10.14.14.0/24")
+                .helper(store.tr(|s| s.config.vpn_portal_cidr_help)),
             )
-            .description(store.tr(|s| s.node.detail.latency_first_help)),
-        )
-        .child(
-            form.toggle(
-                store.tr(|s| s.node.detail.disable_p2p),
-                |draft| draft.disable_p2p,
-                |draft, on| draft.disable_p2p = on,
-                "detail-disable-p2p",
+            .child(
+                form.text(
+                    store.tr(|s| s.config.vpn_portal_port),
+                    |draft| draft.vpn_portal_port.clone(),
+                    |draft, text| draft.vpn_portal_port = text.to_owned(),
+                    ProblemField::VpnPortalPort,
+                    "detail-vpn-portal-port",
+                )
+                .mono()
+                .placeholder(DEFAULT_VPN_PORTAL_PORT.to_string()),
             )
-            .description(store.tr(|s| s.node.detail.disable_p2p_help)),
-        )
-        .child(
-            form.toggle(
-                store.tr(|s| s.node.detail.magic_dns),
-                |draft| draft.accept_dns,
-                |draft, on| draft.accept_dns = on,
-                "detail-magic-dns",
+    };
+    let routes = move || {
+        view().child(
+            form.text(
+                store.tr(|s| s.config.manual_routes_field),
+                |draft| draft.routes.clone(),
+                |draft, text| draft.routes = text.to_owned(),
+                ProblemField::Routes,
+                "detail-routes",
             )
-            .description(store.tr(|s| s.node.detail.magic_dns_help)),
+            .multiline(3)
+            .mono()
+            .placeholder("192.168.0.0/16"),
         )
-        .child(
-            form.toggle(
-                store.tr(|s| s.node.detail.multi_thread),
-                |draft| draft.multi_thread,
-                |draft, on| draft.multi_thread = on,
-                "detail-multi-thread",
-            )
-            .description(store.tr(|s| s.node.detail.multi_thread_help)),
-        )
+    };
+    section(store, |s| s.node.detail.section_sharing)
         .child(
             form.toggle(
                 store.tr(|s| s.node.detail.offers_exit),
@@ -726,6 +730,91 @@ fn advanced(form: Form) -> View {
             ),
         )
         .child(
+            form.gated(
+                form.toggle(
+                    store.tr(|s| s.config.vpn_portal),
+                    |draft| draft.vpn_portal_on,
+                    |draft, on| draft.vpn_portal_on = on,
+                    "detail-vpn-portal",
+                )
+                .description(store.tr(|s| s.config.vpn_portal_help))
+                .exposure(store.tr(|s| s.config.vpn_portal_exposure)),
+                |draft| draft.vpn_portal_on,
+                vpn_portal,
+            ),
+        )
+        .child(
+            form.gated(
+                form.toggle(
+                    store.tr(|s| s.config.manual_routes),
+                    |draft| draft.routes_on,
+                    |draft, on| draft.routes_on = on,
+                    "detail-routes-on",
+                )
+                .description(store.tr(|s| s.config.manual_routes_help)),
+                |draft| draft.routes_on,
+                routes,
+            ),
+        )
+        .child(
+            form.text(
+                store.tr(|s| s.config.recv_limit),
+                |draft| draft.recv_limit.clone(),
+                |draft, text| draft.recv_limit = text.to_owned(),
+                ProblemField::RecvLimit,
+                "detail-recv-limit",
+            )
+            .mono()
+            .placeholder(store.tr(|s| s.config.recv_limit_placeholder))
+            .helper(store.tr(|s| s.config.recv_limit_help)),
+        )
+}
+
+// ----- Relaying -----
+
+/// Whether this node relays for other networks, and which. Not shown for a managed network.
+fn relaying(form: Form) -> View {
+    let Form { store, node, .. } = form;
+    let shared = |pick: fn(&'static crate::i18n::node::SharedStrings) -> &'static str| {
+        move || pick(store.strings().node.shared)
+    };
+    let whitelist = view()
+        .gap_2()
+        .child(segmented(
+            store.tr(|s| s.node.detail.whitelist_label),
+            vec![
+                SelectOption::new("any", store.strings().node.detail.whitelist_any),
+                SelectOption::new("only", store.strings().node.detail.whitelist_only),
+            ],
+            move || {
+                SharedString::from(if form.read(|draft| draft.whitelist_only) {
+                    "only"
+                } else {
+                    "any"
+                })
+            },
+            move |picked| node.edit_editor(|draft| draft.whitelist_only = picked == "only"),
+            "detail-whitelist-mode",
+        ))
+        .child(when(
+            move || form.read(|draft| draft.whitelist_only),
+            move || {
+                form.text(
+                    store.tr(|s| s.node.shared.field_relay_whitelist),
+                    |draft| draft.whitelist.clone(),
+                    |draft, text| draft.whitelist = text.to_owned(),
+                    ProblemField::RelayWhitelist,
+                    "detail-whitelist",
+                )
+                .multiline(3)
+                .mono()
+                .placeholder("team-*")
+                .helper(store.tr(|s| s.node.detail.whitelist_help))
+            },
+        ))
+        .child(form.warnings(|exposure| matches!(exposure, Exposure::WideRelayWhitelist)));
+    section(store, |s| s.node.detail.section_relaying)
+        .child(
             form.toggle(
                 store.tr(|s| s.node.detail.relay_all_rpc),
                 |draft| draft.relay_all_peer_rpc,
@@ -752,6 +841,20 @@ fn advanced(form: Form) -> View {
         .child(whitelist)
 }
 
+// ----- Access control -----
+
+/// The access control list: chains, rules and groups. Not shown for a managed network.
+fn access(form: Form) -> View {
+    let Form { store, node, .. } = form;
+    section(store, |s| s.config.section_acl).child(acl_editor(
+        store,
+        move || form.read(|draft| draft.acl.clone()),
+        move |acl| node.edit_editor(|draft| draft.acl = acl),
+        form.managed,
+        "detail",
+    ))
+}
+
 // ----- Remove -----
 
 /// Delete (or leave management), behind a confirmation that names the network: a row of its own at the bottom.
@@ -771,7 +874,7 @@ fn remove(form: Form, id: ProfileId) -> View {
     } else {
         |s| s.common.delete
     };
-    section(store, |d| d.section_remove).child(
+    section(store, |s| s.node.detail.section_remove).child(
         view()
             .flex_row()
             .flex_wrap()

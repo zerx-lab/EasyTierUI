@@ -15,6 +15,8 @@ mod error;
 mod form;
 mod ids;
 mod model;
+mod patch;
+mod rpc_model;
 mod timestamp;
 mod wire;
 
@@ -22,10 +24,18 @@ pub use address::ServerAddress;
 pub use api::{CredentialRequest, password_digest};
 pub use client::RemoteClient;
 pub use error::RemoteError;
-pub use form::{Encryption, NetworkConfigForm, Networking};
+pub use form::{AclState, Encryption, NetworkConfigForm, Networking};
 pub use ids::new_instance_id;
 pub use model::{
     ConfigSource, Credential, Machine, MachineNetworks, NetworkMeta, NetworkRuntime, NewCredential,
     ONLINE_WINDOW_MS, PeerLink, PeerLinks, PeersSummary, ServerNetwork, ServerSession,
     ServerSummary,
+};
+pub use patch::ConfigPatch;
+pub use rpc_model::{
+    AclAction, AclConnection, AclProtocol, AclRuleStats, AclStats, ConnTrackState, Connector,
+    ConnectorStatus, ForeignNetwork, ForeignNetworkHost, ForeignNetworkSummary,
+    GlobalForeignNetwork, LogLevel, Metric, NodeFacts, PeerFeatures, PeerMapLink, PeerMapNode,
+    PortForwardEntry, PublicIpv6Info, PublicIpv6Lease, RouteEntry, StunFacts, TransportProtocol,
+    VpnPortalInfo, Whitelist,
 };

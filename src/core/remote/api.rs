@@ -10,7 +10,10 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{address::ServerAddress, error::RemoteError, ids::UuidQuad};
+use super::{
+    address::ServerAddress, error::RemoteError, ids::UuidQuad, patch::ConfigPatch,
+    rpc_model::LogLevel,
+};
 use crate::core::secret::Secret;
 
 /// The session cookie's name.
@@ -27,6 +30,36 @@ const CREDENTIAL_SERVICE: &str = "api.instance.CredentialManageRpcService";
 
 /// The peer service behind `proxy-rpc`.
 const PEER_SERVICE: &str = "api.instance.PeerManageRpcService";
+
+/// The peer-center service behind `proxy-rpc` (it takes no instance).
+const PEER_CENTER_SERVICE: &str = "api.instance.PeerCenterManageRpcService";
+
+/// The connector service behind `proxy-rpc`.
+const CONNECTOR_SERVICE: &str = "api.instance.ConnectorManageRpcService";
+
+/// The mapped-listener service behind `proxy-rpc`.
+const MAPPED_LISTENER_SERVICE: &str = "api.instance.MappedListenerManageRpcService";
+
+/// The VPN portal service behind `proxy-rpc`.
+const VPN_PORTAL_SERVICE: &str = "api.instance.VpnPortalRpcService";
+
+/// The ACL service behind `proxy-rpc`.
+const ACL_SERVICE: &str = "api.instance.AclManageRpcService";
+
+/// The port-forward service behind `proxy-rpc`.
+const PORT_FORWARD_SERVICE: &str = "api.instance.PortForwardManageRpcService";
+
+/// The metrics service behind `proxy-rpc`.
+const STATS_SERVICE: &str = "api.instance.StatsRpcService";
+
+/// The logger service behind `proxy-rpc` (it takes no instance: the level is the core process's).
+const LOGGER_SERVICE: &str = "api.logger.LoggerRpcService";
+
+/// The config service behind `proxy-rpc`.
+const CONFIG_SERVICE: &str = "api.config.ConfigRpcService";
+
+/// How easytier-web words a core that did not answer a `proxy-rpc` call in time (`RPC Error: Timeout(Elapsed(()))`).
+const PROXY_TIMEOUT_PREFIX: &str = "RPC Error: Timeout";
 
 /// An HTTP method easytier-web uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -278,24 +311,151 @@ fn instance_selector(instance: Uuid) -> Value {
     json!({ "selector": { "Id": UuidQuad::from(instance) } })
 }
 
+/// A `proxy-rpc` call whose payload only names the instance.
+fn instance_call(machine: Uuid, service: &str, method: &str, instance: Uuid) -> ApiRequest {
+    proxy_rpc(
+        machine,
+        service,
+        method,
+        json!({ "instance": instance_selector(instance) }),
+    )
+}
+
 /// `PeerManageRpcService/ListPeer`.
 pub(crate) fn list_peers(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, PEER_SERVICE, "ListPeer", instance)
+}
+
+/// `PeerManageRpcService/ShowNodeInfo`.
+pub(crate) fn show_node_info(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, PEER_SERVICE, "ShowNodeInfo", instance)
+}
+
+/// `PeerManageRpcService/ListRoute`.
+pub(crate) fn list_routes(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, PEER_SERVICE, "ListRoute", instance)
+}
+
+/// `PeerManageRpcService/ListForeignNetwork`. `include_trusted_keys` is required by the core and sent `false`:
+/// the keys are not needed and stay on the machine.
+pub(crate) fn list_foreign_networks(machine: Uuid, instance: Uuid) -> ApiRequest {
     proxy_rpc(
         machine,
         PEER_SERVICE,
-        "ListPeer",
-        json!({ "instance": instance_selector(instance) }),
+        "ListForeignNetwork",
+        json!({
+            "instance": instance_selector(instance),
+            "include_trusted_keys": false,
+        }),
+    )
+}
+
+/// `PeerManageRpcService/ListGlobalForeignNetwork`.
+pub(crate) fn list_global_foreign_networks(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, PEER_SERVICE, "ListGlobalForeignNetwork", instance)
+}
+
+/// `PeerManageRpcService/GetForeignNetworkSummary`.
+pub(crate) fn foreign_network_summary(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, PEER_SERVICE, "GetForeignNetworkSummary", instance)
+}
+
+/// `PeerManageRpcService/ListPublicIpv6Info`.
+pub(crate) fn list_public_ipv6(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, PEER_SERVICE, "ListPublicIpv6Info", instance)
+}
+
+/// `PeerCenterManageRpcService/GetGlobalPeerMap`: no instance, and `digest` 0 asks for the whole map.
+pub(crate) fn global_peer_map(machine: Uuid) -> ApiRequest {
+    proxy_rpc(
+        machine,
+        PEER_CENTER_SERVICE,
+        "GetGlobalPeerMap",
+        json!({ "digest": 0 }),
+    )
+}
+
+/// `ConnectorManageRpcService/ListConnector`.
+pub(crate) fn list_connectors(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, CONNECTOR_SERVICE, "ListConnector", instance)
+}
+
+/// `MappedListenerManageRpcService/ListMappedListener`.
+pub(crate) fn list_mapped_listeners(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(
+        machine,
+        MAPPED_LISTENER_SERVICE,
+        "ListMappedListener",
+        instance,
+    )
+}
+
+/// `VpnPortalRpcService/GetVpnPortalInfo`.
+pub(crate) fn vpn_portal_info(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, VPN_PORTAL_SERVICE, "GetVpnPortalInfo", instance)
+}
+
+/// `AclManageRpcService/GetAclStats`.
+pub(crate) fn acl_stats(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, ACL_SERVICE, "GetAclStats", instance)
+}
+
+/// `AclManageRpcService/GetWhitelist`.
+pub(crate) fn whitelist(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, ACL_SERVICE, "GetWhitelist", instance)
+}
+
+/// `PortForwardManageRpcService/ListPortForward`.
+pub(crate) fn list_port_forwards(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, PORT_FORWARD_SERVICE, "ListPortForward", instance)
+}
+
+/// `StatsRpcService/GetStats`.
+pub(crate) fn stats(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, STATS_SERVICE, "GetStats", instance)
+}
+
+/// `StatsRpcService/GetPrometheusStats`.
+pub(crate) fn prometheus_stats(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, STATS_SERVICE, "GetPrometheusStats", instance)
+}
+
+/// `LoggerRpcService/GetLoggerConfig`: no instance.
+pub(crate) fn get_logger_config(machine: Uuid) -> ApiRequest {
+    proxy_rpc(machine, LOGGER_SERVICE, "GetLoggerConfig", json!({}))
+}
+
+/// `LoggerRpcService/SetLoggerConfig`: no instance; the core sets the level for the whole process.
+pub(crate) fn set_logger_config(machine: Uuid, level: LogLevel) -> ApiRequest {
+    proxy_rpc(
+        machine,
+        LOGGER_SERVICE,
+        "SetLoggerConfig",
+        json!({ "level": level.code() }),
+    )
+}
+
+/// `ConfigRpcService/GetConfig`: the running config (it includes the network secret).
+pub(crate) fn get_config(machine: Uuid, instance: Uuid) -> ApiRequest {
+    instance_call(machine, CONFIG_SERVICE, "GetConfig", instance)
+}
+
+/// `ConfigRpcService/PatchConfig`: changes the running instance only.
+pub(crate) fn patch_config(machine: Uuid, instance: Uuid, patch: &ConfigPatch) -> ApiRequest {
+    proxy_rpc(
+        machine,
+        CONFIG_SERVICE,
+        "PatchConfig",
+        json!({
+            "patch": patch.to_json(),
+            "instance": instance_selector(instance),
+        }),
     )
 }
 
 /// `CredentialManageRpcService/ListCredentials`.
 pub(crate) fn list_credentials(machine: Uuid, instance: Uuid) -> ApiRequest {
-    proxy_rpc(
-        machine,
-        CREDENTIAL_SERVICE,
-        "ListCredentials",
-        json!({ "instance": instance_selector(instance) }),
-    )
+    instance_call(machine, CREDENTIAL_SERVICE, "ListCredentials", instance)
 }
 
 /// What a new credential allows.
@@ -426,6 +586,10 @@ pub(crate) fn cookie_update(headers: &[(String, String)]) -> CookieUpdate {
 ///   refusal (a wrong login), so [`RemoteError::Rejected`].
 /// - 404 with a message (`Client not found`, `Session not found`): [`RemoteError::NotFound`]. A 404 without one
 ///   is another server or a wrong path: [`RemoteError::Rejected`].
+/// - 502 / 504 with easytier-web's JSON `{"message"}` body: [`RemoteError::MachineNoAnswer`] (its call to the
+///   machine's core failed or timed out). A proxy's 502 / 504 without that body stays a rejection.
+/// - 500 from `proxy-rpc` whose message starts with `RPC Error: Timeout`: the same (easytier-web reports a core
+///   that does not answer as a 500 there). Other 500s, such as `Instance not found`, stay rejections.
 /// - anything else: [`RemoteError::Rejected`] with the server's `message` (or `error`), or the first line of a
 ///   plain-text body, or `HTTP <status>`.
 pub(crate) fn check_status(status: u16, body: &[u8]) -> Result<(), RemoteError> {
@@ -433,9 +597,14 @@ pub(crate) fn check_status(status: u16, body: &[u8]) -> Result<(), RemoteError> 
         return Ok(());
     }
     let message = error_message(body);
+    let is_json_object = body.trim_ascii_start().starts_with(b"{");
     match (status, message) {
         (401, None) if body.iter().all(u8::is_ascii_whitespace) => Err(RemoteError::Unauthorized),
         (404, Some(message)) => Err(RemoteError::NotFound(message)),
+        (502 | 504, Some(message)) if is_json_object => Err(RemoteError::MachineNoAnswer(message)),
+        (500, Some(message)) if is_json_object && message.starts_with(PROXY_TIMEOUT_PREFIX) => {
+            Err(RemoteError::MachineNoAnswer(message))
+        }
         (_, message) => Err(RemoteError::Rejected {
             status,
             message: message.unwrap_or_else(|| format!("HTTP {status}")),
@@ -738,6 +907,209 @@ mod tests {
                 status: 404,
                 message: "HTTP 404".into()
             })
+        );
+        // easytier-web's own gateway errors: the machine's core did not answer, the server is fine.
+        assert_eq!(
+            check_status(504, br#"{"message":"Timeout(Elapsed(()))"}"#),
+            Err(RemoteError::MachineNoAnswer("Timeout(Elapsed(()))".into()))
+        );
+        assert_eq!(
+            check_status(502, b""),
+            Err(RemoteError::Rejected {
+                status: 502,
+                message: "HTTP 502".into()
+            })
+        );
+    }
+
+    #[test]
+    fn a_proxy_rpc_timeout_is_the_machine_not_answering() {
+        // Captured: easytier-web answers 500 when the machine's core stays silent.
+        assert_eq!(
+            check_status(500, &fixture("web-rpc-proxy-rpc-timeout.json")),
+            Err(RemoteError::MachineNoAnswer(
+                "RPC Error: Timeout(Elapsed(()))".into()
+            ))
+        );
+        // Other core-side failures are the core's refusal, not silence.
+        let unknown = br#"{"message":"RPC Error: ExecutionError(Instance not found or API service not available)"}"#;
+        assert!(matches!(
+            check_status(500, unknown),
+            Err(RemoteError::Rejected { status: 500, .. })
+        ));
+        assert!(matches!(
+            check_status(500, &fixture("web-rpc-tcp-proxy-unavailable.json")),
+            Err(RemoteError::Rejected { status: 500, .. })
+        ));
+        // A 500 that is not easytier-web's JSON stays a rejection even if it starts alike.
+        assert!(matches!(
+            check_status(500, b"RPC Error: Timeout"),
+            Err(RemoteError::Rejected { status: 500, .. })
+        ));
+    }
+
+    const MACHINE: &str = "00000000-0000-0000-0000-000000000001";
+    const INSTANCE: &str = "00000000-0000-0000-0000-0000000000cc";
+
+    fn payload_of(request: &ApiRequest) -> Value {
+        let body: Value = serde_json::from_str(request.body.as_deref().unwrap()).unwrap();
+        assert_eq!(request.method, Method::Post);
+        assert_eq!(request.path, format!("/machines/{MACHINE}/proxy-rpc"));
+        body
+    }
+
+    #[test]
+    fn every_instance_service_names_the_instance_by_id_selector() {
+        let machine: Uuid = MACHINE.parse().unwrap();
+        let instance: Uuid = INSTANCE.parse().unwrap();
+        let calls: Vec<(ApiRequest, &str, &str)> = vec![
+            (
+                show_node_info(machine, instance),
+                "PeerManageRpcService",
+                "ShowNodeInfo",
+            ),
+            (
+                list_routes(machine, instance),
+                "PeerManageRpcService",
+                "ListRoute",
+            ),
+            (
+                list_foreign_networks(machine, instance),
+                "PeerManageRpcService",
+                "ListForeignNetwork",
+            ),
+            (
+                list_global_foreign_networks(machine, instance),
+                "PeerManageRpcService",
+                "ListGlobalForeignNetwork",
+            ),
+            (
+                foreign_network_summary(machine, instance),
+                "PeerManageRpcService",
+                "GetForeignNetworkSummary",
+            ),
+            (
+                list_public_ipv6(machine, instance),
+                "PeerManageRpcService",
+                "ListPublicIpv6Info",
+            ),
+            (
+                list_connectors(machine, instance),
+                "ConnectorManageRpcService",
+                "ListConnector",
+            ),
+            (
+                list_mapped_listeners(machine, instance),
+                "MappedListenerManageRpcService",
+                "ListMappedListener",
+            ),
+            (
+                vpn_portal_info(machine, instance),
+                "VpnPortalRpcService",
+                "GetVpnPortalInfo",
+            ),
+            (
+                acl_stats(machine, instance),
+                "AclManageRpcService",
+                "GetAclStats",
+            ),
+            (
+                whitelist(machine, instance),
+                "AclManageRpcService",
+                "GetWhitelist",
+            ),
+            (
+                list_port_forwards(machine, instance),
+                "PortForwardManageRpcService",
+                "ListPortForward",
+            ),
+            (stats(machine, instance), "StatsRpcService", "GetStats"),
+            (
+                prometheus_stats(machine, instance),
+                "StatsRpcService",
+                "GetPrometheusStats",
+            ),
+            (
+                get_config(machine, instance),
+                "ConfigRpcService",
+                "GetConfig",
+            ),
+            (
+                patch_config(machine, instance, &ConfigPatch::new()),
+                "ConfigRpcService",
+                "PatchConfig",
+            ),
+        ];
+        for (request, service, method) in calls {
+            let body = payload_of(&request);
+            let name = body["service_name"].as_str().unwrap();
+            assert!(name.ends_with(service), "{name}");
+            assert!(name.starts_with("api."), "{name}");
+            assert_eq!(body["method_name"], method);
+            assert_eq!(
+                body["payload"]["instance"]["selector"]["Id"],
+                json!({"part1": 0, "part2": 0, "part3": 0, "part4": 204}),
+                "{method}"
+            );
+        }
+    }
+
+    #[test]
+    fn rpc_payloads_the_core_demands_are_complete() {
+        let machine: Uuid = MACHINE.parse().unwrap();
+        let instance: Uuid = INSTANCE.parse().unwrap();
+        // `include_trusted_keys` is required; trusted keys are never asked for.
+        let body = payload_of(&list_foreign_networks(machine, instance));
+        assert_eq!(body["payload"]["include_trusted_keys"], false);
+        // The peer center and the logger take no instance.
+        let body = payload_of(&global_peer_map(machine));
+        assert_eq!(
+            body["service_name"],
+            "api.instance.PeerCenterManageRpcService"
+        );
+        assert_eq!(body["payload"], json!({"digest": 0}));
+        let body = payload_of(&get_logger_config(machine));
+        assert_eq!(body["service_name"], "api.logger.LoggerRpcService");
+        assert_eq!(body["payload"], json!({}));
+        let body = payload_of(&set_logger_config(machine, LogLevel::Debug));
+        assert_eq!(body["method_name"], "SetLoggerConfig");
+        assert_eq!(body["payload"], json!({"level": 4}));
+    }
+
+    #[test]
+    fn patch_config_payloads_equal_the_captured_requests() {
+        use super::super::rpc_model::TransportProtocol::{Tcp, Udp};
+        let machine: Uuid = MACHINE.parse().unwrap();
+        let instance: Uuid = INSTANCE.parse().unwrap();
+        let captured = |name: &str| serde_json::from_slice::<Value>(&fixture(name)).unwrap();
+
+        let mut add = ConfigPatch::new();
+        add.hostname("example-host-m2").unwrap();
+        add.add_port_forward(Udp, "127.0.0.1:43051", "10.144.145.2:53")
+            .unwrap();
+        add.add_proxy_network("10.251.0.0/24", None).unwrap();
+        add.add_route("10.252.0.0/16").unwrap();
+        add.add_connector("tcp://127.0.0.1:43015").unwrap();
+        add.add_mapped_listener("tcp://127.0.0.1:43016").unwrap();
+        add.add_whitelist_port(Tcp, "80").unwrap();
+        add.add_whitelist_port(Udp, "53").unwrap();
+        add.add_exit_node("10.144.145.2").unwrap();
+        let body = payload_of(&patch_config(machine, instance, &add));
+        assert_eq!(
+            body["payload"],
+            captured("web-rpc-patch-config-request.json")
+        );
+
+        let mut remove = ConfigPatch::new();
+        remove
+            .remove_port_forward(Udp, "127.0.0.1:43051", "10.144.145.2:53")
+            .unwrap();
+        remove.remove_proxy_network("10.251.0.0/24").unwrap();
+        remove.clear_connectors();
+        let body = payload_of(&patch_config(machine, instance, &remove));
+        assert_eq!(
+            body["payload"],
+            captured("web-rpc-patch-config-remove-request.json")
         );
     }
 

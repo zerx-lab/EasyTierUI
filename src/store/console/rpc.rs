@@ -183,35 +183,42 @@ impl ConsoleStore {
             .unwrap_or_default()
     }
 
-    /// Shows `tab` in the drawer of `machine` on `id`. The peers tab starts on the machine's first running network
-    /// when no peer list of this machine is open yet.
-    pub fn show_machine_tab(&self, id: TargetId, machine: Uuid, tab: MachineTab) {
+    /// Shows `tab` in the machine drawer.
+    pub fn show_machine_tab(&self, tab: MachineTab) {
         self.machine_tab.set(tab);
-        if tab != MachineTab::Peers {
-            return;
-        }
-        let open_here = self
-            .peers
-            .with_untracked(|peers| peers.as_ref().is_some_and(|peers| peers.machine == machine));
-        if open_here {
-            return;
-        }
-        let first = self.networks.with_untracked(|all| {
-            all.get(&id)
-                .and_then(|by_machine| by_machine.get(&machine))
-                .and_then(|feed| feed.value.as_ref())
-                .and_then(|networks| {
-                    networks
-                        .iter()
-                        .find(|network| network.running)
-                        .map(|network| (network.instance_id, network.name.clone()))
+    }
+
+    /// Makes the peer list the one of network `instance` of `machine` and reads it again: what the peers tab does
+    /// when it opens. The work runs in a task, so building the tab never writes a signal.
+    pub fn show_peers_of(&self, id: TargetId, machine: Uuid, instance: Uuid) {
+        let this = *self;
+        self.go(async move {
+            let open = this.peers.with_untracked(|peers| {
+                peers.as_ref().is_some_and(|peers| {
+                    peers.target == id && peers.machine == machine && peers.instance == instance
                 })
+            });
+            if open {
+                this.refresh_peers();
+                return;
+            }
+            let network = this
+                .networks
+                .with_untracked(|all| {
+                    all.get(&id)
+                        .and_then(|by_machine| by_machine.get(&machine))
+                        .and_then(|feed| feed.value.as_ref())
+                        .and_then(|networks| {
+                            networks
+                                .iter()
+                                .find(|network| network.instance_id == instance)
+                                .map(|network| network.name.clone())
+                        })
+                })
+                .unwrap_or_default();
+            let host = this.machine_host(id, machine);
+            this.open_peers(id, machine, instance, network, host);
         });
-        let Some((instance, network)) = first else {
-            return;
-        };
-        let host = self.machine_host(id, machine);
-        self.open_peers(id, machine, instance, network, host);
     }
 
     /// Opens `machine`'s drawer on `id` at the peers of network `instance` (named `network`).
@@ -221,6 +228,7 @@ impl ConsoleStore {
                 all.insert(id, machine);
             });
             self.machine_tab.set(MachineTab::Peers);
+            self.pick_scope(id, machine, instance);
         });
         self.refresh_networks(id, machine);
         let host = self.machine_host(id, machine);

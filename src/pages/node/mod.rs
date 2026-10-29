@@ -12,10 +12,10 @@ mod panels;
 mod peer_drawer;
 mod peers;
 mod tun;
+mod web;
 
 use nsh_core::prelude::*;
 
-use super::unavailable;
 use crate::{
     core::platform::Availability,
     store::{Page, Store},
@@ -27,18 +27,19 @@ pub fn header_actions(_store: Store, _page: Page) -> Option<AnyElement> {
     None
 }
 
-/// The networks of this device.
+/// The networks of this device; in the web build, of the machine picked on the serving server.
 pub fn networks(store: Store) -> AnyElement {
     match store.capabilities().node {
-        Availability::Elsewhere(limitation) => unavailable(store, limitation).into_element(),
+        // Only a browser cannot be a node: it manages a machine of the server that served it.
+        Availability::Elsewhere(_) => web::networks(store),
         Availability::Local(_) => networks::page(store).into_element(),
     }
 }
 
-/// The peers of this device's running networks.
+/// The peers of this device's running networks; in the web build, of the machine picked on the serving server.
 pub fn peers(store: Store) -> AnyElement {
     match store.capabilities().node {
-        Availability::Elsewhere(limitation) => unavailable(store, limitation).into_element(),
+        Availability::Elsewhere(_) => web::peers(store),
         Availability::Local(_) => peers::page(store).into_element(),
     }
 }

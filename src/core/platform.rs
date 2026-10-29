@@ -72,7 +72,8 @@ pub enum Backend {
 pub enum Limitation {
     /// A browser has no TUN interface and no sockets: it cannot be a node.
     BrowserCannotJoinNetwork,
-    /// A browser cannot run easytier-web: the web build is that server's dashboard.
+    /// A browser cannot run easytier-web: the web build is that server's dashboard. The control-plane pages
+    /// (Status, Hardening) are then views of the serving easytier-web through its REST API.
     BrowserCannotRunPrograms,
     /// A phone or tablet cannot host a server reliably.
     MobileCannotHost,

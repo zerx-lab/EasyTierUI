@@ -3,6 +3,8 @@
 //! Pages and the store speak these types only; nothing above this module names an EasyTier crate, binary, flag or
 //! field (AGENTS.md, "Roles and the core boundary").
 
+pub mod acl;
+pub mod desktop;
 pub mod keychain;
 pub mod net;
 pub mod node;
@@ -11,6 +13,7 @@ pub mod pairs;
 pub mod platform;
 pub mod role;
 pub mod secret;
+pub mod settings;
 pub mod state;
 pub mod target;
 pub mod version;

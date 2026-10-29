@@ -1,0 +1,80 @@
+[package]
+name = "desktop-shell"
+version = "0.1.0"
+edition = "2024"
+description = "EasyTierUI's desktop integration NSH 0.3 has no API for: the tray icon, closing to the tray, starting hidden, one instance, starting at login"
+publish = false
+
+# The same table as the app's Cargo.toml, with one difference (the user's decision): `unsafe_code` is `deny` instead of
+# `forbid`, so the two modules that must call AppKit / Win32 directly (`macos.rs`, `windows.rs`) can lift it with a
+# module-level `expect`; every `unsafe` block carries a `// SAFETY:` comment (`undocumented_unsafe_blocks`). Linux,
+# the tray, the single instance and the login item are safe Rust.
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+dbg_macro = "deny"
+get_unwrap = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+unwrap_in_result = "deny"
+panic_in_result_fn = "deny"
+fallible_impl_from = "deny"
+exit = "deny"
+mem_forget = "deny"
+arithmetic_side_effects = "warn"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
+print_stdout = "deny"
+print_stderr = "deny"
+let_underscore_must_use = "deny"
+unused_result_ok = "warn"
+allow_attributes_without_reason = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[dependencies]
+log = "0.4"
+# One error enum the app can match on.
+thiserror = "2"
+
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+# The tray icon and its menu (Tauri's). `ksni` on Linux: the StatusNotifierItem D-Bus protocol in Rust, because the
+# default backend links GTK 3, which cannot share a process with NSH's GTK 4. The feature does nothing elsewhere.
+tray-icon = { version = "0.26", default-features = false, features = ["ksni"] }
+# Decodes the tray icon's PNG (already in the tree through tray-icon and the app).
+png = "0.18"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSNotification"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "objc2-core-foundation",
+    "NSApplication",
+    "NSResponder",
+    "NSWindow",
+] }
+# The main queue: requests from the tray's and the instance listener's threads run on AppKit's thread.
+dispatch2 = "0.3.1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+# The login item: `HKCU\...\Run`, through Microsoft's safe registry API.
+windows-registry = "0.6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# NSH's own toolkit (the same major version): the window's close request, and D-Bus for the tray host check.
+gtk4 = "0.11"

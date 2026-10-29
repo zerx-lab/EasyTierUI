@@ -57,6 +57,10 @@ pub struct ServerSession {
     pub client_url: String,
     /// The account that owns it (a database id). The list covers every account's machines.
     pub user_id: i64,
+    /// The account name the machine enrolled with (the `token` of the reply; the last segment of its config-server
+    /// URL). That name is an enrollment credential, so it is a [`Secret`]: show it only on request. Empty when the
+    /// server sends none.
+    pub account: Secret,
 }
 
 /// The instances on one machine: `GET /machines/{mid}/networks`.

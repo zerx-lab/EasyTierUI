@@ -41,7 +41,10 @@ The source tree (each module was created when its first real code landed):
 ```
 src/core/             Roles and the core boundary: domain types (Secret, CoreVersion, NetworkState, NodeSnapshot,
                       PeerSummary, Target, Role, ...), the NodeBackend / ProgramSource traits, capabilities per platform,
-                      the data directory (owner-only files), the keychain (SecretStore), net (peer / listener URLs)
+                      the data directory (owner-only files), the keychain (SecretStore), net (peer / listener URLs),
+                      settings (the core's switches, port forwards, VPN portal, mapped listeners), acl (ACL v1 chains,
+                      rules and groups, group secrets apart) shared by local profiles and console configs, and desktop
+                      (the app's own tray, single instance and login item, through `crates/desktop-shell`)
   sidecar/            Desktops, node role: the official easytier-core as the app's child (no TUN) or as an OS service
                       `easytierui-<key>` installed through `easytier-cli service` after the user agrees (TUN); state
                       through easytier-cli -o json on the loopback RPC portal
@@ -53,16 +56,21 @@ src/core/             Roles and the core boundary: domain types (Secret, CoreVer
   remote/             Console role on every platform: easytier-web REST client over NSH `fetch` (same origin on the web)
 crates/easytier-mobile/  The UniFFI bridge: the only crate that links EasyTier's library (git, pinned to v2.6.4), mobile
                       targets only; its README holds the LGPL-3.0 note and the binding generation steps
+crates/desktop-shell/ Desktops: the tray icon (show / quit), closing to the tray, starting hidden, one instance per
+                      user, the login item (LaunchAgent / HKCU Run / XDG autostart); NSH 0.3 has no API for them.
+                      `unsafe` only in macos.rs / windows.rs (the user's decision)
 src/deploy/           Server deployment artifacts: Docker Compose / systemd / reverse proxy / firewall / README, rendered
                       from a validated DeploymentPlan
 src/profile/          Network profiles: model, validation, TOML rendering, import / share links / QR, persistence
-src/store/            App state: the root Store (targets, pages, language, work mode) and one sub-store per role (node,
-                      console, host, versions); pages read signals and call functions; per-target state
+src/store/            App state: the root Store (targets, pages, language, work mode), one sub-store per role (node,
+                      console, host, versions) and desktop (tray, quiet start, login item); pages read signals and call
+                      functions; per-target state
 src/shell/            The root's layout: the custom desktop title bar, sidebar (wide) or NavStack (compact), target switcher
-src/pages/            One module per role (node/, console/, host/) and settings.rs; the same pages on every platform
+src/pages/            One module per role (node/, console/, host/) and settings.rs; the same pages on every platform;
+                      config/ holds the editor parts both network editors share (feature switches, the ACL editor)
 src/components/       The app's styled components, built on nsh-base and theme tokens
 src/i18n/             Every user-facing string, zh-CN and en: root strings plus one struct per area (common, node, console,
-                      host, versions)
+                      host, versions, desktop, config: the shared network-editor parts)
 tests/app/            Integration tests: one test binary, a module per area, headless on NSH's engine
 tests/fixtures/       Captured, redacted output of a real release (easytier-2.6.4/), GitHub releases, deployment snapshots
 ```
@@ -103,6 +111,7 @@ cargo test                                  # unit tests + tests/app (headless);
 cargo test --lib -- --ignored               # real-binary smokes: core --no-tun, easytier-web start/harden (EASYTIER_DIR /
                                             # ET_RELEASE_DIR, default /tmp/easytier-2.6.4/easytier-macos-aarch64)
 cargo test -p easytier-mobile               # the UniFFI bridge (compiles EasyTier's library on the host; needs protoc)
+cargo test -p desktop-shell                 # the tray / instance / login-item bridge (login entries, icons, the lock)
 UPDATE_DEPLOY_SNAPSHOTS=1 cargo test --lib deploy::tests::snapshot   # after an intended artifact change; review the diff
 cargo check --target wasm32-unknown-unknown --lib                    # the web build
 cargo check --target aarch64-apple-ios --lib                         # iOS (protoc on PATH)
@@ -134,7 +143,7 @@ easytier-web --db <tmp>/et.db --api-server-addr 127.0.0.1   # a throwaway local 
   |---|---|---|---|
   | Desktops | `sidecar` (easytier-core) | `remote` | `controlplane` (easytier-web), opt-in |
   | Android / iOS | `embedded`, no TUN in this build (see below) | `remote` | a remote host via console, plus `deploy` artifacts |
-  | Web (on the server) | the server's own core, managed through the co-located easytier-web | `remote`, same origin | it is that easytier-web's dashboard; process settings via `deploy` |
+  | Web (on the server) | a machine enrolled in the serving easytier-web, picked on the page and managed through its REST API | `remote`, same origin, every `proxy-rpc` service 2.6.4 answers | it is that easytier-web's dashboard: status and the hardening it can do through REST (the signed-in account's password); process settings via `deploy` |
 
 - **Node config source** per instance: *local* (a profile edited here) or *managed* (`--config-server` +
   persisted `--machine-id`, configs pushed by a control plane); managed instances are read-only locally, run as the
@@ -171,6 +180,23 @@ easytier-web --db <tmp>/et.db --api-server-addr 127.0.0.1   # a throwaway local 
   before unpacking; install side by side under the app's data directory (`cores/<version>/`), keep the previous version
   for rollback; never install silently; a user-chosen binary needs explicit confirmation.
 
+### Desktop shell (the app's own window behavior)
+
+- **Keep to the tray** (on by default), **start at login** and **start quietly** (the user's decisions) are Settings →
+  Desktop; phones and the web show that they belong to the desktop app. Closing the window hides it only while a tray
+  icon exists to bring it back: a tray that cannot be made, or a Linux desktop without a StatusNotifierWatcher host,
+  leaves closing to quit, and the switch says why. Quiet start hides the window at every launch and needs the tray.
+- **One instance per user**: the first holds `instance.lock` in the data directory and listens on a loopback port that
+  only understands "show the window"; a later launch asks it to show and quits before its Store starts, so the same
+  networks never run twice. Headless runs (no NSH window) skip it.
+- **Login item**: per user, never a system service and never elevated — `~/Library/LaunchAgents/<id>.login.plist`,
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, `$XDG_CONFIG_HOME/autostart/<id>.desktop` — pointing at the
+  current executable (rewritten at start while on). Tests use the in-memory one (`test.login-item=memory`).
+- `crates/desktop-shell` attaches to NSH's window from the UI thread: a stand-in AppKit window delegate forwarding to
+  NSH's (macOS), a Win32 subclass of the `NshWindow` (Windows), GTK's `close-request` and a replaced `app.quit`
+  (Linux); tray-icon with its `ksni` backend on Linux (GTK 3 cannot share a process with NSH's GTK 4). Only
+  `src/core/desktop.rs` names it.
+
 ### Security
 
 - **Secrets** (network secret, easytier-web passwords, session cookie and its own internal / webhook / OIDC secrets,
@@ -192,8 +218,9 @@ easytier-web --db <tmp>/et.db --api-server-addr 127.0.0.1   # a throwaway local 
   typed request, no UI).
 - **Safe defaults**: encryption on (`aes-gcm`; `xor` is never called encryption); CSPRNG network secrets of at least
   128 bits and a warning on weak typed ones (EasyTier's digest is SipHash, not a KDF); exit node, subnet proxy, port
-  forwarding, SOCKS5, listeners on all interfaces and relay settings off until the user turns them on, with an
-  explanation; no hard-coded public shared nodes; easytier-web over HTTPS / WSS except loopback; no telemetry.
+  forwarding, SOCKS5, the WireGuard VPN portal, kernel forwarding of proxied subnets, listeners on all interfaces and
+  relay settings off until the user turns them on, with an explanation; no hard-coded public shared nodes;
+  easytier-web over HTTPS / WSS except loopback; no telemetry.
 - **Hosting / deploying easytier-web**: a fresh database has `admin` / `admin` and `user` / `user`, so both passwords
   are replaced before the REST API is reachable beyond loopback; `--api-server-addr 127.0.0.1` behind an HTTPS proxy
   (in Docker Compose the container's loopback cannot be tunnelled to, so the API listens on the compose network only
@@ -238,7 +265,9 @@ easytier-web --db <tmp>/et.db --api-server-addr 127.0.0.1   # a throwaway local 
   (`assert!` / `debug_assert!` too, which clippy cannot deny). How to fail instead: `rule://rust-error-handling`.
 - **No `unsafe`**: `unsafe_code = "forbid"`. NSH does the FFI. NSH's `#[class]` expands to `unsafe impl` and so is not
   used here; any bridge that needs `unsafe` (JNI, a Network Extension, EasyTier's C ABI) is a separate crate created by
-  user decision, with `// SAFETY:` on every block, while this crate keeps `forbid`.
+  user decision, with `// SAFETY:` on every block, while this crate keeps `forbid`. The one so far:
+  `crates/desktop-shell` (`unsafe_code = "deny"`, lifted by a module-level `expect` in `macos.rs` and `windows.rs`
+  only; the TTSR rules `rust-no-unsafe` and `rust-allow-reason` leave exactly those two files out of scope).
 - The lint policy is never loosened to make a check pass. In tests, `#[test]` functions and `#[cfg(test)]` modules may
   panic; helpers there still avoid unchecked arithmetic and string slicing or carry a scoped `#[expect(…, reason = …)]`.
 

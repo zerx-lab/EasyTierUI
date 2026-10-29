@@ -2,18 +2,17 @@
 //! with safe defaults. No secret lives here (the network secret and the control-plane address rest in the keychain
 //! under [`ProfileId::network_secret_account`] / [`ProfileId::config_server_account`]).
 
-use std::{
-    fmt,
-    net::{IpAddr, SocketAddr},
-};
+use std::{fmt, net::IpAddr, str::FromStr};
 
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
 
 use super::error::ProfileError;
 use crate::core::{
-    net::{ListenerUrl, PeerUrl},
+    acl::Acl,
+    net::{self, ListenerUrl, NetError, PeerUrl},
     node::{InstanceKey, Privilege},
+    settings::{MappedListener, NodeFlags, PortForward, VpnPortal},
 };
 
 /// The longest display name or network name, in characters.
@@ -28,6 +27,18 @@ pub const MTU_RANGE: (u16, u16) = (1280, 1500);
 pub const DEFAULT_MTU: u16 = 1380;
 /// The most peers, listeners, subnets, forwards, exit nodes or whitelist entries a profile may carry.
 pub const MAX_LIST_ENTRIES: usize = 64;
+
+/// Parses `a.b.c.d/len` as a route: any prefix length from 0 to 32 (a default route is `0.0.0.0/0`). Whether the
+/// address is the network's own is checked by [`NetworkProfile::validate`].
+///
+/// # Errors
+///
+/// [`NetError::BadCidr`] under `field`.
+pub fn parse_route(field: &str, text: &str) -> Result<Ipv4Net, NetError> {
+    Ipv4Net::from_str(text.trim()).map_err(|_| NetError::BadCidr {
+        field: field.to_owned(),
+    })
+}
 
 /// A person's text made fit for a name field: surrounding whitespace and control characters removed, cut to `max`
 /// characters (never bytes, so CJK names stay whole characters).
@@ -84,6 +95,12 @@ impl ProfileId {
     /// The keychain account of the control-plane address of a managed profile.
     pub fn config_server_account(&self) -> String {
         format!("profile/{}/config-server", self.0)
+    }
+
+    /// The keychain account of the ACL group secrets: one value holding every declared group's secret
+    /// ([`GroupSecrets::to_keychain`]).
+    pub fn acl_group_secrets_account(&self) -> String {
+        format!("profile/{}/acl-group-secrets", self.0)
     }
 
     /// The instance key (`p-<id>`) the node backends file this profile's config, logs and service under.
@@ -223,37 +240,6 @@ impl Encryption {
     }
 }
 
-/// Transport of a forwarded port.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Proto {
-    /// TCP.
-    Tcp,
-    /// UDP.
-    Udp,
-}
-
-impl Proto {
-    /// The name in the config file.
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Tcp => "tcp",
-            Self::Udp => "udp",
-        }
-    }
-}
-
-/// A local port forwarded to an address in the virtual network.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct PortForward {
-    /// TCP or UDP.
-    pub proto: Proto,
-    /// Where this device listens (`127.0.0.1:8080` keeps it on this device; `0.0.0.0` opens it to the LAN).
-    pub bind: SocketAddr,
-    /// The virtual-network address and port it is forwarded to.
-    pub dst: SocketAddr,
-}
-
 /// A SOCKS5 proxy this node serves into the network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Socks5 {
@@ -282,6 +268,79 @@ pub enum RelayWhitelist {
     Any,
     /// Only networks matching these names (`*` wildcards allowed); an empty list relays for no other network.
     Only(Vec<String>),
+}
+
+/// One subnet behind this node that peers may reach through it, optionally presented to them under another network
+/// of the same size (`192.168.50.0/24->10.50.0.0/24`). Stored and written in the config as that text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct SubnetProxy {
+    /// The real subnet.
+    pub cidr: Ipv4Net,
+    /// The subnet peers see it as; `None` shows it as it is.
+    pub mapped: Option<Ipv4Net>,
+}
+
+impl SubnetProxy {
+    /// A subnet shared as it is.
+    pub const fn plain(cidr: Ipv4Net) -> Self {
+        Self { cidr, mapped: None }
+    }
+
+    /// Reads one line of the editors' list: `192.168.50.0/24` or `192.168.50.0/24->10.50.0.0/24`. Both parts must be
+    /// usable subnets; whether the two have the same size is checked by [`NetworkProfile::validate`].
+    ///
+    /// # Errors
+    ///
+    /// The [`NetError`] of [`net::parse_ipv4_subnet`] under `field` (`{field}.mapped` for the second part).
+    pub fn parse_line(field: &str, line: &str) -> Result<Self, NetError> {
+        let (real, mapped) = match line.split_once("->") {
+            Some((real, mapped)) => (real, Some(mapped)),
+            None => (line, None),
+        };
+        Ok(Self {
+            cidr: net::parse_ipv4_subnet(field, real.trim())?,
+            mapped: mapped
+                .map(|text| net::parse_ipv4_subnet(&format!("{field}.mapped"), text.trim()))
+                .transpose()?,
+        })
+    }
+}
+
+impl fmt::Display for SubnetProxy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.mapped {
+            Some(mapped) => write!(f, "{}->{mapped}", self.cidr),
+            None => write!(f, "{}", self.cidr),
+        }
+    }
+}
+
+impl TryFrom<String> for SubnetProxy {
+    type Error = NetError;
+
+    /// Reads stored text; only the shape is checked here, [`NetworkProfile::validate`] checks the networks.
+    fn try_from(text: String) -> Result<Self, NetError> {
+        let bad = || NetError::BadCidr {
+            field: "subnet_proxy".to_owned(),
+        };
+        let (real, mapped) = match text.split_once("->") {
+            Some((real, mapped)) => (real, Some(mapped)),
+            None => (text.as_str(), None),
+        };
+        Ok(Self {
+            cidr: Ipv4Net::from_str(real.trim()).map_err(|_| bad())?,
+            mapped: mapped
+                .map(|mapped| Ipv4Net::from_str(mapped.trim()).map_err(|_| bad()))
+                .transpose()?,
+        })
+    }
+}
+
+impl From<SubnetProxy> for String {
+    fn from(subnet: SubnetProxy) -> Self {
+        subnet.to_string()
+    }
 }
 
 /// One EasyTier network on this device.
@@ -318,12 +377,30 @@ pub struct NetworkProfile {
     /// The MTU; EasyTier's default (1380) when `None`.
     #[serde(default)]
     pub mtu: Option<u16>,
-    /// Prefer the lowest-latency route over the fewest hops.
+    /// The core's behavior switches (routing, NAT traversal, KCP / QUIC, system integration). Stored flattened
+    /// beside the other fields, so profiles saved before they existed keep loading.
+    #[serde(flatten)]
+    pub flags: NodeFlags,
+    /// Mapped listeners: public addresses of this node's listeners announced to peers.
     #[serde(default)]
-    pub latency_first: bool,
+    pub mapped_listeners: Vec<MappedListener>,
+    /// The most bytes per second this instance receives; unlimited when `None`.
+    #[serde(default)]
+    pub instance_recv_bps_limit: Option<u64>,
     /// Subnets behind this node that other peers may reach through it (subnet proxy). Off unless listed.
     #[serde(default)]
-    pub subnet_proxy: Vec<Ipv4Net>,
+    pub subnet_proxy: Vec<SubnetProxy>,
+    /// Manual routes: `Some` turns manual routing on (an empty list then means no routes at all), `None` leaves the
+    /// routes to EasyTier.
+    #[serde(default)]
+    pub manual_routes: Option<Vec<Ipv4Net>>,
+    /// The WireGuard VPN portal; off unless set.
+    #[serde(default)]
+    pub vpn_portal: Option<VpnPortal>,
+    /// Access control; none unless set. Its group secrets rest in the keychain
+    /// ([`ProfileId::acl_group_secrets_account`]).
+    #[serde(default)]
+    pub acl: Option<Acl>,
     /// Whether this node lets peers route their internet traffic through it (an exit node).
     #[serde(default)]
     pub offers_exit_node: bool,
@@ -345,15 +422,6 @@ pub struct NetworkProfile {
     /// Which other networks to relay for.
     #[serde(default)]
     pub relay_whitelist: RelayWhitelist,
-    /// Never hole-punch; only relayed or directly dialed connections.
-    #[serde(default)]
-    pub disable_p2p: bool,
-    /// Resolve peer hostnames through EasyTier's built-in (magic) DNS.
-    #[serde(default)]
-    pub accept_dns: bool,
-    /// Run the core on several threads. On by default.
-    #[serde(default = "yes")]
-    pub multi_thread: bool,
     /// The network interface's name (`et0`); the system's choice when `None`.
     #[serde(default)]
     pub dev_name: Option<String>,
@@ -380,7 +448,12 @@ impl NetworkProfile {
             tun: true,
             encryption: Encryption::AesGcm,
             mtu: None,
-            latency_first: false,
+            flags: NodeFlags::default(),
+            mapped_listeners: Vec::new(),
+            instance_recv_bps_limit: None,
+            manual_routes: None,
+            vpn_portal: None,
+            acl: None,
             subnet_proxy: Vec::new(),
             offers_exit_node: false,
             exit_nodes: Vec::new(),
@@ -389,9 +462,6 @@ impl NetworkProfile {
             relay_all_peer_rpc: false,
             private_mode: true,
             relay_whitelist: RelayWhitelist::Any,
-            disable_p2p: false,
-            accept_dns: false,
-            multi_thread: true,
             dev_name: None,
         }
     }
@@ -444,7 +514,13 @@ impl NetworkProfile {
             found.push(Exposure::UsesExitNode(*node));
         }
         for subnet in &self.subnet_proxy {
-            found.push(Exposure::SharesSubnet(*subnet));
+            found.push(Exposure::SharesSubnet(subnet.cidr));
+        }
+        if let Some(portal) = self.vpn_portal {
+            found.push(Exposure::VpnPortal(portal));
+        }
+        if self.flags.proxy_forward_by_system {
+            found.push(Exposure::ForwardBySystem);
         }
         for forward in &self.port_forwards {
             found.push(Exposure::ForwardsPort {
@@ -513,11 +589,16 @@ pub enum Exposure {
     RelaysAllPeerRpc,
     /// Relays for any network without needing its secret.
     WideRelayWhitelist,
+    /// WireGuard clients may join the network through this node, from every interface it has.
+    VpnPortal(VpnPortal),
+    /// Subnet-proxy traffic is forwarded by the OS kernel, so the system's firewall and routing apply to it.
+    ForwardBySystem,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::settings::Proto;
 
     fn id() -> ProfileId {
         ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap()
@@ -617,7 +698,12 @@ mod tests {
         ];
         profile.offers_exit_node = true;
         profile.exit_nodes = vec!["10.144.144.9".parse().unwrap()];
-        profile.subnet_proxy = vec!["192.168.50.0/24".parse().unwrap()];
+        profile.subnet_proxy = vec![SubnetProxy::plain("192.168.50.0/24".parse().unwrap())];
+        profile.vpn_portal = Some(VpnPortal {
+            client_cidr: "10.14.14.0/24".parse().unwrap(),
+            listen_port: 22022,
+        });
+        profile.flags.proxy_forward_by_system = true;
         profile.port_forwards = vec![PortForward {
             proto: Proto::Tcp,
             bind: "0.0.0.0:8080".parse().unwrap(),
@@ -644,6 +730,12 @@ mod tests {
         assert!(found.contains(&Exposure::PrivateModeOff));
         assert!(found.contains(&Exposure::RelaysAllPeerRpc));
         assert!(found.contains(&Exposure::WideRelayWhitelist));
+        assert!(found.contains(&Exposure::ForwardBySystem));
+        assert!(
+            found
+                .iter()
+                .any(|e| matches!(e, Exposure::VpnPortal(p) if p.listen_port == 22022))
+        );
         assert_eq!(
             found
                 .iter()
@@ -682,5 +774,33 @@ mod tests {
         let minimal = r#"{"id":"0123456789abcdef0123456789abcdef","name":"Home","network_name":"home-net","future_field":[1,2]}"#;
         let loaded: NetworkProfile = serde_json::from_str(minimal).unwrap();
         assert_eq!(loaded, NetworkProfile::new(id(), "Home", "home-net"));
+    }
+
+    #[test]
+    fn a_profile_with_every_field_round_trips_through_json() {
+        let (profile, _) = crate::profile::testing::full_profile().unwrap();
+        let json = serde_json::to_string(&profile).unwrap();
+        assert_eq!(
+            serde_json::from_str::<NetworkProfile>(&json).unwrap(),
+            profile
+        );
+        // Group secrets are never part of the stored profile.
+        assert!(!json.contains("example-group-secret"));
+        assert!(json.contains("192.168.50.0/24->10.50.0.0/24"));
+    }
+
+    #[test]
+    fn subnet_lines_read_and_write_the_arrow_form() {
+        let plain = SubnetProxy::parse_line("s", " 192.168.50.0/24 ").unwrap();
+        assert_eq!(
+            plain,
+            SubnetProxy::plain("192.168.50.0/24".parse().unwrap())
+        );
+        assert_eq!(plain.to_string(), "192.168.50.0/24");
+        let mapped = SubnetProxy::parse_line("s", "192.168.50.0/24 -> 10.50.0.0/24").unwrap();
+        assert_eq!(mapped.to_string(), "192.168.50.0/24->10.50.0.0/24");
+        assert!(SubnetProxy::parse_line("s", "192.168.50.7/24").is_err());
+        assert!(SubnetProxy::parse_line("s", "192.168.50.0/24->nope").is_err());
+        assert!(serde_json::from_str::<SubnetProxy>("\"nope\"").is_err());
     }
 }

@@ -55,11 +55,6 @@ pub(super) static STRINGS: Strings = Strings {
     kind_machine: "Machine",
     kind_peer: "Peer",
 
-    notice_browser_node: "This browser can't join a network.",
-    notice_browser_node_action: "Manage this server's nodes",
-    notice_browser_host: "This browser can't run EasyTier's programs. This server's control plane changes through \
-                          its deployment files.",
-    notice_browser_host_action: "Open deployment",
     notice_mobile_host: "This device can't host a control plane.",
     notice_mobile_host_action: "Deploy a control plane",
 
@@ -91,8 +86,13 @@ pub(super) static STRINGS: Strings = Strings {
     settings_version: "Version",
 
     common: &super::common::EN,
+    config: &super::config::EN,
     node: &super::node::EN,
     console: &super::console::EN,
+    console_inspect: &super::console_inspect::EN,
+    console_runtime: &super::console_runtime::EN,
     host: &super::host::EN,
+    desktop: &super::desktop::EN,
     versions: &super::versions::EN,
+    web_host: &super::web_host::EN,
 };

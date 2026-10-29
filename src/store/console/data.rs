@@ -42,6 +42,9 @@ impl ConsoleStore {
             self.machines.update(|all| {
                 all.remove(&id);
             });
+            self.overview.update(|all| {
+                all.remove(&id);
+            });
             self.networks.update(|all| {
                 all.remove(&id);
             });
@@ -51,6 +54,8 @@ impl ConsoleStore {
             self.credentials.update(|all| {
                 all.remove(&id);
             });
+            self.clear_runtime(id);
+            self.clear_inspect(id);
             self.close_overlays_of(id);
         });
     }
@@ -61,6 +66,12 @@ impl ConsoleStore {
             self.machines.update(|all| {
                 if let Some(feed) = all.get_mut(&id) {
                     feed.loading = false;
+                }
+            });
+            self.overview.update(|all| {
+                if let Some(overview) = all.get_mut(&id) {
+                    overview.summary.loading = false;
+                    overview.sessions.loading = false;
                 }
             });
             self.networks.update(|all| {
@@ -75,6 +86,8 @@ impl ConsoleStore {
                     state.list.loading = false;
                 }
             });
+            self.stop_runtime_loading(id);
+            self.stop_inspect_loading(id);
         });
     }
 

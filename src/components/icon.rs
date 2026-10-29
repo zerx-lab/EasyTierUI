@@ -104,6 +104,8 @@ pub enum Icon {
     ArrowUp,
     /// A funnel: filter.
     Filter,
+    /// A screen on a stand: the desktop app.
+    Monitor,
 }
 
 impl Icon {
@@ -253,6 +255,11 @@ impl Icon {
             Self::ArrowDown => &["M12 5v14", "M6 13l6 6 6-6"],
             Self::ArrowUp => &["M12 19V5", "M6 11l6-6 6 6"],
             Self::Filter => &["M3 5h18l-7 8.5V20l-4-2v-4.5z"],
+            Self::Monitor => &[
+                "M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+                "M8 21h8",
+                "M12 17v4",
+            ],
         }
     }
 }

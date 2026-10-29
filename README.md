@@ -21,6 +21,10 @@ role); Settings changes it or picks roles one by one:
   README) on any platform.
 - **EasyTier releases** (desktops) — list GitHub releases, download, verify the sha256 digest, install side by side,
   switch, roll back, or use a directory you installed yourself after confirming its version.
+- **Desktop app** (desktops) — a tray icon with Show / Quit, closing the window to the tray so this device's networks
+  keep running, starting quietly (window hidden, tray only), starting at login (a per-user login item), and one running
+  instance per user (a second launch shows the first one's window). Linux needs a StatusNotifierItem tray host (KDE,
+  or GNOME's AppIndicator extension); without one, closing the window quits.
 
 Prerequisites beyond NSH's: `protoc` on `PATH` for the iOS / Android builds (EasyTier's library compiles protobufs),
 and for Android the NDK that NSH uses.

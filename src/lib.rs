@@ -13,7 +13,10 @@ pub mod store;
 use nsh_base::theme;
 use nsh_core::prelude::*;
 
-use crate::{core::platform::Platform, store::Store};
+use crate::{
+    core::{desktop::InstanceClaim, platform::Platform},
+    store::Store,
+};
 
 /// The app's UI set (`nsh.json` `"rust"`): what a TSX entry may import from
 /// `easytierui/native` (`README.md`, "Adding a TSX entry").
@@ -34,13 +37,18 @@ fn native(registry: &mut Registry) {
     registry.register::<App>();
 }
 
-/// The application's root component.
+/// The application's root component. On a desktop that already runs EasyTierUI, the running one is asked to show
+/// its window and this one quits before any of its state (networks, servers, the hosted control plane) starts.
 #[component]
 pub fn App() -> impl IntoElement {
-    let store = Store::new(Platform::from_os(os()));
-    view()
+    let platform = Platform::from_os(os());
+    let root = view()
         .flex_1()
         .bg(move || theme().background)
-        .text_color(move || theme().foreground)
-        .child(shell::shell(store))
+        .text_color(move || theme().foreground);
+    if platform.is_desktop() && core::desktop::claim_instance() == InstanceClaim::Second {
+        return root;
+    }
+    let store = Store::new(platform);
+    root.child(shell::shell(store))
 }

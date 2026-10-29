@@ -10,11 +10,14 @@ mod account;
 mod credentials;
 mod dialogs;
 mod editor;
+pub(crate) mod embed;
 mod format;
 mod gate;
+mod inspect;
 mod machine;
 mod machines;
 mod networks;
+mod runtime;
 
 use nsh_core::prelude::*;
 
@@ -59,6 +62,35 @@ pub fn networks(store: Store) -> AnyElement {
 /// A server's credentials.
 pub fn credentials(store: Store) -> AnyElement {
     gate::gate(store, move |id| credentials::ready(store, id))
+}
+
+/// `ready(id)` while the selected server is signed in, else the sign-in gate: for the web build's control-plane
+/// pages, which are views of the server that serves the page.
+pub(super) fn gated(
+    store: Store,
+    ready: impl Fn(crate::core::target::TargetId) -> AnyElement + 'static,
+) -> AnyElement {
+    gate::gate(store, ready)
+}
+
+/// The toolbar of a signed-in server's page (identity, freshness, refresh, account menu).
+pub(super) fn server_toolbar(
+    store: Store,
+    id: crate::core::target::TargetId,
+    live: bool,
+    refresh: impl Fn() + 'static,
+    read_at: impl Fn() -> Option<f64> + 'static,
+) -> View {
+    account::server_toolbar(store, id, Vec::new(), live, refresh, read_at)
+}
+
+/// A failed read of the server with its reason and a retry.
+pub(super) fn load_failed(
+    store: Store,
+    error: &crate::core::remote::RemoteError,
+    retry: impl Fn() + 'static,
+) -> AnyElement {
+    networks::load_failed(store, error, retry)
 }
 
 /// The console's overlays: the add-server and password dialogs and the show-once credential dialog, and the

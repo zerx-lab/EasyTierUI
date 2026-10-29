@@ -4,9 +4,12 @@
 //! Every struct is `#[serde(default)]` without `deny_unknown_fields`: a newer server adds fields, an older one
 //! lacks some, and a list must never vanish because one row is odd.
 
+mod rpc;
+
 use std::{collections::BTreeMap, net::Ipv4Addr};
 
 use ipnet::Ipv4Net;
+pub(crate) use rpc::*;
 use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -144,6 +147,8 @@ struct SessionWire {
     machine_id: String,
     client_url: String,
     user_id: i64,
+    /// The enrollment account name; a credential, so a `Secret`.
+    token: Secret,
 }
 
 /// Reads `GET /sessions`; a row whose machine id is not a UUID is skipped.
@@ -156,6 +161,7 @@ pub(crate) fn parse_sessions(body: &[u8]) -> Result<Vec<ServerSession>, RemoteEr
                 machine_id: row.machine_id.parse().ok()?,
                 client_url: row.client_url,
                 user_id: row.user_id,
+                account: row.token,
             })
         })
         .collect())
@@ -479,17 +485,18 @@ struct ListPeerWire {
     peer_infos: Vec<PeerInfoWire>,
 }
 
+/// One peer with its links.
+fn peer_links(peer: PeerInfoWire) -> PeerLinks {
+    PeerLinks {
+        peer_id: peer.peer_id,
+        links: peer.conns.into_iter().map(peer_link).collect(),
+    }
+}
+
 /// Reads the reply of `PeerManageRpcService/ListPeer`.
 pub(crate) fn parse_list_peers(body: &[u8]) -> Result<Vec<PeerLinks>, RemoteError> {
     let wire: ListPeerWire = decode(body)?;
-    Ok(wire
-        .peer_infos
-        .into_iter()
-        .map(|peer| PeerLinks {
-            peer_id: peer.peer_id,
-            links: peer.conns.into_iter().map(peer_link).collect(),
-        })
-        .collect())
+    Ok(wire.peer_infos.into_iter().map(peer_links).collect())
 }
 
 fn peer_link(conn: ConnWire) -> PeerLink {
@@ -664,6 +671,8 @@ mod tests {
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].machine_id, id(MACHINE));
         assert_eq!(sessions[0].user_id, 2);
+        assert_eq!(sessions[0].account.expose(), "admin");
+        assert!(!format!("{:?}", sessions[0]).contains("admin"));
         assert!(sessions[0].client_url.starts_with("udp://127.0.0.1:"));
     }
 

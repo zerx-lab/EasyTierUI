@@ -15,7 +15,11 @@
 
 mod data;
 mod editor;
+mod inspect;
+mod node_pick;
+mod overview;
 mod rpc;
+mod runtime;
 mod session;
 
 use std::{
@@ -32,7 +36,10 @@ pub use self::{
         ENCRYPTION_IDS, Editor, EditorError, EditorFields, EditorMode, FormProblem,
         NetworkingChoice,
     },
+    inspect::{CopyState, InstanceViews},
+    overview::Overview,
     rpc::{CredentialFields, CredentialsState, Issued, Lifetime, PeersDialog},
+    runtime::{Form, ProxyNet, RunningFacts, RuntimeFailure, RuntimeFields, Scope, VpnSummary},
     session::{AddError, AddFields, PasswordError, PasswordFields, SignInError, SignInFields},
 };
 use super::{Store, StoreEnv};
@@ -75,6 +82,9 @@ pub struct Feed<T> {
     pub loading: bool,
     /// Why the last read failed; cleared by the next success.
     pub error: Option<RemoteError>,
+    /// Reads failed in a row since the last success: one failure is often a blip (easytier-web gives a machine's
+    /// core 5 s per proxied call), so pages warn only when it repeats.
+    pub failures: u32,
     /// When the value was read, in Unix milliseconds.
     pub read_at_ms: Option<f64>,
 }
@@ -85,6 +95,7 @@ impl<T> Default for Feed<T> {
             value: None,
             loading: false,
             error: None,
+            failures: 0,
             read_at_ms: None,
         }
     }
@@ -101,6 +112,7 @@ impl<T> Feed<T> {
         self.value = Some(value);
         self.loading = false;
         self.error = None;
+        self.failures = 0;
         self.read_at_ms = Some(now_ms);
     }
 
@@ -108,6 +120,7 @@ impl<T> Feed<T> {
     pub(crate) fn fail(&mut self, error: RemoteError) {
         self.loading = false;
         self.error = Some(error);
+        self.failures = self.failures.saturating_add(1);
     }
 }
 
@@ -122,22 +135,71 @@ pub enum MachineTab {
     Networks,
     /// The peers of one of its running networks.
     Peers,
+    /// The node's own facts in one of its running networks.
+    Node,
+    /// The routing table of a running network.
+    Routes,
+    /// The foreign networks a running network relays, and the mesh's peer map.
+    Relay,
+    /// The metrics of a running network.
+    Stats,
+    /// The manual connectors, mapped listeners and VPN portal of a running network.
+    Connections,
+    /// The port forwards and proxied subnets of a running network.
+    Forwarding,
+    /// The access rules and open ports of a running network.
+    Access,
+    /// The core's log level (the whole machine's, not a network's).
+    Logs,
 }
 
 impl MachineTab {
+    /// Every tab, in the order the drawer lists them.
+    pub const ALL: [MachineTab; 10] = [
+        Self::Networks,
+        Self::Peers,
+        Self::Node,
+        Self::Routes,
+        Self::Relay,
+        Self::Stats,
+        Self::Connections,
+        Self::Forwarding,
+        Self::Access,
+        Self::Logs,
+    ];
+
+    /// The tabs the drawer shows as a strip; the others are chosen from a menu beside it.
+    pub const MAIN: [MachineTab; 4] = [Self::Networks, Self::Peers, Self::Node, Self::Routes];
+
+    /// The tabs behind the menu beside the strip.
+    pub const MORE: [MachineTab; 6] = [
+        Self::Relay,
+        Self::Stats,
+        Self::Connections,
+        Self::Forwarding,
+        Self::Access,
+        Self::Logs,
+    ];
+
     /// A stable id for option lists.
     pub fn id(self) -> &'static str {
         match self {
             Self::Networks => "networks",
             Self::Peers => "peers",
+            Self::Node => "node",
+            Self::Routes => "routes",
+            Self::Relay => "relay",
+            Self::Stats => "stats",
+            Self::Connections => "connections",
+            Self::Forwarding => "forwarding",
+            Self::Access => "access",
+            Self::Logs => "logs",
         }
     }
 
     /// The tab with option id `id`.
     pub fn from_id(id: &str) -> Option<Self> {
-        [Self::Networks, Self::Peers]
-            .into_iter()
-            .find(|tab| tab.id() == id)
+        Self::ALL.into_iter().find(|tab| tab.id() == id)
     }
 }
 
@@ -164,8 +226,12 @@ pub struct ConsoleStore {
     auto_at: Stored<BTreeMap<TargetId, f64>>,
     sessions: Signal<BTreeMap<TargetId, Session>>,
     machines: Signal<BTreeMap<TargetId, Feed<Vec<Machine>>>>,
+    /// The summary and sessions behind the web build's control-plane pages.
+    overview: Signal<BTreeMap<TargetId, Overview>>,
     networks: Signal<BTreeMap<TargetId, NetworkFeeds>>,
     selected: Signal<BTreeMap<TargetId, Uuid>>,
+    /// The machine the web build's Node pages manage, per server (kept in `Storage`, see `node_pick`).
+    node_picks: Signal<BTreeMap<TargetId, Uuid>>,
     machine_tab: Signal<MachineTab>,
     /// What the machine search field holds.
     machine_query: Signal<String>,
@@ -185,6 +251,10 @@ pub struct ConsoleStore {
     credential: CredentialFields,
     issued: Signal<Option<Issued>>,
     peers: Signal<Option<PeersDialog>>,
+    /// What the machine drawer's runtime tabs read and change on a running network.
+    runtime: runtime::RuntimeState,
+    /// What the machine drawer's inspect tabs read from a running network, and which network they are about.
+    inspect: inspect::InspectState,
 }
 
 impl ConsoleStore {
@@ -203,8 +273,10 @@ impl ConsoleStore {
             auto_at: stored(BTreeMap::new()),
             sessions: signal(BTreeMap::new()),
             machines: signal(BTreeMap::new()),
+            overview: signal(BTreeMap::new()),
             networks: signal(BTreeMap::new()),
             selected: signal(BTreeMap::new()),
+            node_picks: signal(BTreeMap::new()),
             machine_tab: signal(MachineTab::default()),
             machine_query: signal(String::new()),
             network_query: signal(String::new()),
@@ -220,6 +292,8 @@ impl ConsoleStore {
             credential: CredentialFields::new(),
             issued: signal(None),
             peers: signal(None),
+            runtime: runtime::RuntimeState::new(),
+            inspect: inspect::InspectState::new(),
         }
     }
 

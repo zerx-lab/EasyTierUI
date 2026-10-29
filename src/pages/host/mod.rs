@@ -1,18 +1,21 @@
 //! Control-plane host: running easytier-web here, or deploying it to a server.
 //!
-//! Status and Hardening act on the control plane this desktop hosts; on a phone or in the browser they show a
-//! Capability Notice that leads to Deployment, which renders the server files on every platform.
+//! Status and Hardening act on the control plane this desktop hosts. In the browser they are views of the serving
+//! easytier-web through its REST API (behind the console sign-in gate); on a phone they show a Capability Notice
+//! that leads to Deployment, which renders the server files on every platform.
 
 mod deployment;
 mod hardening;
 mod parts;
 mod status;
+mod web_hardening;
+mod web_status;
 
 use nsh_core::prelude::*;
 
-use super::unavailable;
+use super::mobile_host_notice;
 use crate::{
-    core::platform::Availability,
+    core::platform::{Availability, Limitation},
     store::{Page, Store},
 };
 
@@ -38,7 +41,10 @@ pub fn header_actions(store: Store, page: Page) -> Option<AnyElement> {
 /// The hosted control plane's state.
 pub fn status(store: Store) -> AnyElement {
     match store.capabilities().host {
-        Availability::Elsewhere(limitation) => unavailable(store, limitation).into_element(),
+        Availability::Elsewhere(Limitation::MobileCannotHost) => {
+            mobile_host_notice(store).into_element()
+        }
+        Availability::Elsewhere(_) => web_status::page(store),
         Availability::Local(_) => status::page(store).into_element(),
     }
 }
@@ -46,7 +52,10 @@ pub fn status(store: Store) -> AnyElement {
 /// First-run hardening of the hosted control plane.
 pub fn hardening(store: Store) -> AnyElement {
     match store.capabilities().host {
-        Availability::Elsewhere(limitation) => unavailable(store, limitation).into_element(),
+        Availability::Elsewhere(Limitation::MobileCannotHost) => {
+            mobile_host_notice(store).into_element()
+        }
+        Availability::Elsewhere(_) => web_hardening::page(store),
         Availability::Local(_) => hardening::page(store).into_element(),
     }
 }

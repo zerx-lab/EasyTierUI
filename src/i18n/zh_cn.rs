@@ -53,10 +53,6 @@ pub(super) static STRINGS: Strings = Strings {
     kind_machine: "机器",
     kind_peer: "对等节点",
 
-    notice_browser_node: "浏览器无法加入组网。",
-    notice_browser_node_action: "管理本服务器的节点",
-    notice_browser_host: "浏览器无法运行 EasyTier 程序。本服务器的控制平面通过部署文件修改。",
-    notice_browser_host_action: "打开部署",
     notice_mobile_host: "此设备无法托管控制平面。",
     notice_mobile_host_action: "部署控制平面",
 
@@ -84,8 +80,13 @@ pub(super) static STRINGS: Strings = Strings {
     settings_version: "版本",
 
     common: &super::common::ZH_CN,
+    config: &super::config::ZH_CN,
     node: &super::node::ZH_CN,
     console: &super::console::ZH_CN,
+    console_inspect: &super::console_inspect::ZH_CN,
+    console_runtime: &super::console_runtime::ZH_CN,
     host: &super::host::ZH_CN,
+    desktop: &super::desktop::ZH_CN,
     versions: &super::versions::ZH_CN,
+    web_host: &super::web_host::ZH_CN,
 };

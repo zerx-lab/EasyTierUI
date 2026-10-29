@@ -4,18 +4,28 @@
 //! natively; EasyTier's terms stay consistent (network 网络, node 节点, peer 对等节点, core 内核, control plane 控制平面).
 
 mod common;
+mod config;
 mod console;
+mod console_inspect;
+mod console_runtime;
+mod desktop;
 mod en;
 mod host;
 pub mod node;
 mod versions;
+mod web_host;
 mod zh_cn;
 
 pub use common::CommonStrings;
+pub use config::ConfigStrings;
 pub use console::ConsoleStrings;
+pub use console_inspect::ConsoleInspectStrings;
+pub use console_runtime::ConsoleRuntimeStrings;
+pub use desktop::DesktopStrings;
 pub use host::HostStrings;
 pub use node::NodeStrings;
 pub use versions::VersionStrings;
+pub use web_host::WebHostStrings;
 
 /// A language the UI is written in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +55,18 @@ impl Language {
             Self::En => &en::STRINGS,
         }
     }
+}
+
+/// The system's preferred UI language tag. NSH's `locale()` is the region format (`NSLocale.currentLocale`), which
+/// a bundle declaring only an `en` localization reports as `en_CN` on a Chinese system; the preferred-language list
+/// is what the user chose as the system language. `locale()` is still read so a system change re-renders.
+pub fn system_language_tag() -> String {
+    let region_format = nsh_core::prelude::locale();
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(tag) = sys_locale::get_locale() {
+        return tag;
+    }
+    region_format.as_str().to_owned()
 }
 
 /// The language the user chose in Settings.
@@ -189,14 +211,6 @@ pub struct Strings {
     /// Kind chip of a drawer: a peer of a running network.
     pub kind_peer: &'static str,
 
-    /// Capability notice: a browser cannot be a node.
-    pub notice_browser_node: &'static str,
-    /// Its remote alternative.
-    pub notice_browser_node_action: &'static str,
-    /// Capability notice: a browser cannot run easytier-web.
-    pub notice_browser_host: &'static str,
-    /// Its remote alternative.
-    pub notice_browser_host_action: &'static str,
     /// Capability notice: a phone cannot host a control plane.
     pub notice_mobile_host: &'static str,
     /// Its remote alternative.
@@ -248,14 +262,24 @@ pub struct Strings {
 
     /// Words every area shares.
     pub common: &'static CommonStrings,
+    /// The settings both network editors share (behavior switches, VPN portal, access control).
+    pub config: &'static ConfigStrings,
     /// The node role's strings.
     pub node: &'static NodeStrings,
     /// The console role's strings.
     pub console: &'static ConsoleStrings,
+    /// The console machine drawer's tabs that read a running network (node facts, routes, relay, stats).
+    pub console_inspect: &'static ConsoleInspectStrings,
+    /// The console machine drawer's tabs that change a running network (connections, forwarding, access, logs).
+    pub console_runtime: &'static ConsoleRuntimeStrings,
     /// The control-plane host role's strings (status, hardening, deployment).
     pub host: &'static HostStrings,
+    /// The desktop app's own behavior (tray, login item, quiet start) and its tray menu.
+    pub desktop: &'static DesktopStrings,
     /// EasyTier versions on this desktop.
     pub versions: &'static VersionStrings,
+    /// The control-plane pages in the web build (the serving easytier-web, through its REST API).
+    pub web_host: &'static WebHostStrings,
 }
 
 /// `template` with each `{name}` replaced by its value from `args`; unknown placeholders stay as written so a

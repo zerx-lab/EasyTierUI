@@ -97,6 +97,24 @@ pub struct ImportStrings {
     pub secret_help: &'static str,
     /// Preview: an imported network never starts by itself.
     pub never_starts: &'static str,
+    /// Row: manual routes.
+    pub row_routes: &'static str,
+    /// Manual routes are on with no routes.
+    pub routes_empty: &'static str,
+    /// Row: mapped listeners.
+    pub row_mapped_listeners: &'static str,
+    /// Row: the VPN portal.
+    pub row_vpn_portal: &'static str,
+    /// Row: the receive speed limit.
+    pub row_recv_limit: &'static str,
+    /// The limit; `{limit}` is bytes per second.
+    pub recv_limit_value: &'static str,
+    /// Row: access control.
+    pub row_acl: &'static str,
+    /// The access control's size; `{chains}` and `{rules}` are counts.
+    pub acl_summary: &'static str,
+    /// Declared groups lack secrets; `{count}` is how many.
+    pub acl_groups_missing: &'static str,
     /// Managed dialog: title.
     pub managed_title: &'static str,
     /// Managed dialog: what it is.
@@ -160,6 +178,15 @@ pub(super) static EN: ImportStrings = ImportStrings {
     secret_missing: "This import has no network secret. Enter it to join a private network.",
     secret_help: "Leave it empty only if the network has no secret.",
     never_starts: "An imported network never starts by itself. Start it from the list when you are ready.",
+    row_routes: "Manual routes",
+    routes_empty: "On, with no routes",
+    row_mapped_listeners: "Mapped listeners",
+    row_vpn_portal: "VPN portal",
+    row_recv_limit: "Receive speed limit",
+    recv_limit_value: "{limit} bytes per second",
+    row_acl: "Access control",
+    acl_summary: "{chains} chains, {rules} rules",
+    acl_groups_missing: "{count} declared groups have no secret. Add them in the access-control settings before starting.",
     managed_title: "Join a control plane",
     managed_explain: "This network is managed by a control plane (easytier-web). It runs as your own process without TUN, so there is no administrator prompt, and its settings become read-only here.",
     managed_server_label: "Control plane address",
@@ -216,6 +243,15 @@ pub(super) static ZH_CN: ImportStrings = ImportStrings {
     secret_missing: "此次导入不含网络密钥。加入私有网络请在此输入。",
     secret_help: "只有网络本身没有密钥时才可留空。",
     never_starts: "导入的网络不会自动启动。准备好后请在列表中手动启动。",
+    row_routes: "手动路由",
+    routes_empty: "已开启，但没有任何路由",
+    row_mapped_listeners: "映射监听地址",
+    row_vpn_portal: "VPN 门户",
+    row_recv_limit: "接收速率限制",
+    recv_limit_value: "{limit} 字节/秒",
+    row_acl: "访问控制",
+    acl_summary: "{chains} 条链，{rules} 条规则",
+    acl_groups_missing: "有 {count} 个声明的分组没有密钥。启动前请在访问控制设置中补上。",
     managed_title: "加入控制平面",
     managed_explain: "此网络由控制平面（easytier-web）管理。它以你自己的进程运行，不使用 TUN，因此不会弹出管理员授权，其设置在这里将变为只读。",
     managed_server_label: "控制平面地址",

@@ -2,14 +2,39 @@
 //! settings drawer, the capability notices, and the deployment form with its file list. No easytier-web runs and
 //! nothing is applied to a server.
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use nsh_engine::Os;
+use nsh_testing::StubNetwork;
 
 use crate::{
     Device,
+    console::{MACHINE, fixture, reply, route, sign_in, start as start_with_server},
     settings::{appears, start_with},
 };
+
+/// A server that accepts `admin` / `admin` and answers the control-plane pages' reads with the captured replies.
+fn web_server() -> Arc<StubNetwork> {
+    Arc::new(StubNetwork::new([
+        route("GET", "/api/v1/auth/check_login_status", reply(401, b"")),
+        route("POST", "/api/v1/auth/login", reply(200, b"{}")),
+        route(
+            "GET",
+            "/api/v1/machines",
+            reply(200, &fixture("web-machines.json")),
+        ),
+        route(
+            "GET",
+            "/api/v1/summary",
+            reply(200, &fixture("web-summary.json")),
+        ),
+        route(
+            "GET",
+            "/api/v1/sessions",
+            reply(200, &fixture("web-sessions.json")),
+        ),
+    ]))
+}
 
 /// The text nodes on screen, in tree order.
 fn texts(app: &nsh_testing::Headless) -> Vec<String> {
@@ -209,13 +234,61 @@ fn on_a_phone_the_files_stack_under_the_form() {
 }
 
 #[test]
-fn a_browser_cannot_host_and_deploys_instead() {
-    let mut app = Device::desktop(Os::Web, 1200.0).start().unwrap();
+fn a_browser_shows_the_servers_status_behind_its_sign_in() {
+    let stub = web_server();
+    let mut app = start_with_server(&Device::desktop(Os::Web, 1200.0), &stub);
     app.press("id:page-host-status").unwrap();
-    appears(&mut app, "Open deployment").unwrap();
-    app.press("Open deployment").unwrap();
-    appears(&mut app, "Domain").unwrap();
-    appears(&mut app, "No deployment files yet").unwrap();
+    // Not a capability notice: the page is the serving easytier-web's, so it asks to sign in first.
+    sign_in(&mut app);
+    app.wait_for(&format!("id:session-{MACHINE}")).unwrap();
+    for shown in [
+        "Machine sessions",
+        "Devices",
+        "Reachable",
+        "example-host-m",
+        "2.6.4-8428a89d",
+    ] {
+        assert!(app.shows(shown), "{shown}");
+    }
+    assert!(!app.shows("Open deployment"));
+    let requests = stub.requests();
+    for path in ["/api/v1/summary", "/api/v1/sessions"] {
+        assert!(
+            requests.iter().any(|request| request.url.ends_with(path)),
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn a_browser_hardens_what_the_api_can_and_sends_the_rest_to_deployment() {
+    let stub = web_server();
+    let mut app = start_with_server(&Device::desktop(Os::Web, 1200.0), &stub);
+    app.press("id:page-hardening").unwrap();
+    sign_in(&mut app);
+    app.wait_for("id:web-password-action").unwrap();
+    for shown in [
+        "Change password",
+        "Registration is off",
+        "The seeded user account's password",
+        "Set by deployment",
+    ] {
+        assert!(app.shows(shown), "{shown}");
+    }
+    // The seeded account is never tried by signing in: that would replace this browser's session.
+    let logins = stub
+        .requests()
+        .iter()
+        .filter(|request| request.url.ends_with("/api/v1/auth/login"))
+        .count();
+    assert_eq!(logins, 1);
+    app.press("id:web-password-action >> text:Change password")
+        .unwrap();
+    app.wait_for("id:password-new").unwrap();
+    app.press("Cancel").unwrap();
+    app.press("id:web-open-deployment-registration >> text:Open deployment")
+        .unwrap();
+    app.wait_for("No deployment files yet").unwrap();
 }
 
 #[test]

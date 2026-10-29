@@ -18,6 +18,7 @@ use crate::{
         secret::{Secret, Strength},
     },
     i18n::fill,
+    pages::config::{acl_editor, acl_error_text, flag_switches},
     store::{
         Store,
         console::{EditorError, EditorMode, FormProblem, NetworkingChoice},
@@ -67,7 +68,22 @@ fn error_text(store: Store, error: &EditorError) -> String {
             FormProblem::Peer(line) => fill(c.problem_peer, &[("line", line.as_str())]),
             FormProblem::Listener(line) => fill(c.problem_listener, &[("line", line.as_str())]),
             FormProblem::Proxy(line) => fill(c.problem_proxy, &[("line", line.as_str())]),
+            FormProblem::ExitNode(line) => fill(c.problem_exit_node, &[("line", line.as_str())]),
             FormProblem::Socks5Port => c.problem_socks5_port.to_owned(),
+            FormProblem::Mtu => c.problem_mtu.to_owned(),
+            FormProblem::DevName => c.problem_dev_name.to_owned(),
+            FormProblem::RecvLimit => c.problem_recv_limit.to_owned(),
+            FormProblem::MappedListener(line) => {
+                fill(c.problem_mapped_listener, &[("line", line.as_str())])
+            }
+            FormProblem::Route(line) => fill(c.problem_route, &[("line", line.as_str())]),
+            FormProblem::Whitelist(line) => fill(c.problem_whitelist, &[("line", line.as_str())]),
+            FormProblem::VpnCidr => c.problem_vpn_cidr.to_owned(),
+            FormProblem::VpnPort => c.problem_vpn_port.to_owned(),
+            FormProblem::Forward(line) => fill(c.problem_forward, &[("line", line.as_str())]),
+            FormProblem::Acl(error) => {
+                format!("{} {}", c.problem_acl, acl_error_text(store, error))
+            }
             FormProblem::NothingToImport => c.problem_nothing_to_import.to_owned(),
         },
     }
@@ -115,6 +131,24 @@ fn section(label: impl IntoReactive<SharedString>, first: bool) -> View {
                 .border_color(move || theme().border)
         })
         .child(section_label(label))
+}
+
+/// The error line of a field: the words for the form's problem when `pick` says it is this field's, else none. The
+/// dialog's callout still names it, since the form is long and the buttons are far from the field.
+fn problem_on(
+    store: Store,
+    pick: fn(&FormProblem) -> bool,
+) -> impl Fn() -> Option<SharedString> + 'static {
+    let console = store.console();
+    move || match console.editor().error {
+        Some(error @ EditorError::Problem(_)) => match &error {
+            EditorError::Problem(problem) if pick(problem) => {
+                Some(SharedString::from(error_text(store, &error)))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// The dialog's content: the step, and below it why the last attempt failed.
@@ -419,78 +453,22 @@ fn form(store: Store) -> View {
         .child(section(tr(store, |c| c.editor_section_connect), false))
         .child(address)
         .child(networking)
+        .child(listeners(store))
         .child(
             field(
-                tr(store, |c| c.editor_listeners),
-                move || fields.listeners.get(),
-                move |text| fields.listeners.set(text.to_owned()),
+                store.tr(|s| s.config.mapped_listeners),
+                move || fields.mapped_listeners.get(),
+                move |text| fields.mapped_listeners.set(text.to_owned()),
             )
-            .multiline(3)
-            .placeholder("tcp://0.0.0.0:11010")
-            .helper(tr(store, |c| c.editor_listeners_help))
+            .multiline(2)
+            .placeholder("tcp://203.0.113.5:11010")
+            .helper(store.tr(|s| s.config.mapped_listeners_help))
+            .error(problem_on(store, |problem| {
+                matches!(problem, FormProblem::MappedListener(_))
+            }))
             .mono()
-            .test_id("editor-listeners"),
+            .test_id("editor-mapped-listeners"),
         )
-        .child(when(
-            move || console.listeners_expose_all(),
-            move || {
-                callout(
-                    CalloutKind::Warning,
-                    tr(store, |c| c.editor_listeners_exposed),
-                )
-            },
-        ))
-        .child(section(tr(store, |c| c.editor_section_share), false))
-        .child(
-            field(
-                tr(store, |c| c.editor_proxy),
-                move || fields.proxy_cidrs.get(),
-                move |text| fields.proxy_cidrs.set(text.to_owned()),
-            )
-            .multiline(3)
-            .placeholder("192.168.1.0/24")
-            .helper(tr(store, |c| c.editor_proxy_help))
-            .mono()
-            .test_id("editor-proxy"),
-        )
-        .child(when(
-            move || !fields.proxy_cidrs.get().trim().is_empty(),
-            move || callout(CalloutKind::Warning, tr(store, |c| c.editor_proxy_exposed)),
-        ))
-        .child(
-            switch_row(
-                tr(store, |c| c.editor_exit_node),
-                move || fields.exit_node.get(),
-                move |on| fields.exit_node.set(on),
-            )
-            .description(tr(store, |c| c.editor_exit_node_help))
-            .exposure(tr(store, |c| c.editor_exit_exposed))
-            .test_id("editor-exit-node"),
-        )
-        .child(
-            switch_row(
-                tr(store, |c| c.editor_socks5),
-                move || fields.socks5.get(),
-                move |on| fields.socks5.set(on),
-            )
-            .description(tr(store, |c| c.editor_socks5_help))
-            .exposure(tr(store, |c| c.editor_socks5_exposed))
-            .test_id("editor-socks5"),
-        )
-        .child(when(
-            move || fields.socks5.get(),
-            move || {
-                field(
-                    tr(store, |c| c.editor_socks5_port),
-                    move || fields.socks5_port.get(),
-                    move |text| fields.socks5_port.set(text.to_owned()),
-                )
-                .placeholder("1080")
-                .mono()
-                .test_id("editor-socks5-port")
-            },
-        ))
-        .child(section(tr(store, |c| c.editor_section_behavior), false))
         .child(
             switch_row(
                 tr(store, |c| c.editor_no_tun),
@@ -499,24 +477,6 @@ fn form(store: Store) -> View {
             )
             .description(tr(store, |c| c.editor_no_tun_help))
             .test_id("editor-no-tun"),
-        )
-        .child(
-            switch_row(
-                tr(store, |c| c.editor_latency_first),
-                move || fields.latency_first.get(),
-                move |on| fields.latency_first.set(on),
-            )
-            .description(tr(store, |c| c.editor_latency_first_help))
-            .test_id("editor-latency-first"),
-        )
-        .child(
-            switch_row(
-                tr(store, |c| c.editor_disable_p2p),
-                move || fields.disable_p2p.get(),
-                move |on| fields.disable_p2p.set(on),
-            )
-            .description(tr(store, |c| c.editor_disable_p2p_help))
-            .test_id("editor-disable-p2p"),
         )
         .child(
             select(
@@ -537,4 +497,364 @@ fn form(store: Store) -> View {
                 )
             },
         ))
+        .child(
+            field(
+                tr(store, |c| c.editor_mtu),
+                move || fields.mtu.get(),
+                move |text| fields.mtu.set(text.to_owned()),
+            )
+            .placeholder("1380")
+            .helper(tr(store, |c| c.editor_mtu_help))
+            .error(problem_on(store, |problem| {
+                matches!(problem, FormProblem::Mtu)
+            }))
+            .mono()
+            .test_id("editor-mtu"),
+        )
+        .child(
+            field(
+                tr(store, |c| c.editor_dev_name),
+                move || fields.dev_name.get(),
+                move |text| fields.dev_name.set(text.to_owned()),
+            )
+            .placeholder("et0")
+            .helper(tr(store, |c| c.editor_dev_name_help))
+            .error(problem_on(store, |problem| {
+                matches!(problem, FormProblem::DevName)
+            }))
+            .mono()
+            .test_id("editor-dev-name"),
+        )
+        .child(section(store.tr(|s| s.config.section_flags), false))
+        .child(flag_switches(
+            store,
+            move || fields.flags.get(),
+            move |flag, on| fields.flags.update(|flags| flag.set(flags, on)),
+            false,
+            "editor",
+        ))
+        .child(section(tr(store, |c| c.editor_section_share), false))
+        .child(sharing(store))
+        .child(section(tr(store, |c| c.editor_section_relay), false))
+        .child(relaying(store))
+        .child(section(store.tr(|s| s.config.section_acl), false))
+        .child(access(store))
+}
+
+/// The listeners, with the exposure note while one of them binds every interface.
+fn listeners(store: Store) -> View {
+    let console = store.console();
+    let fields = console.editor_fields();
+    view()
+        .gap_2()
+        .child(
+            field(
+                tr(store, |c| c.editor_listeners),
+                move || fields.listeners.get(),
+                move |text| fields.listeners.set(text.to_owned()),
+            )
+            .multiline(3)
+            .placeholder("tcp://0.0.0.0:11010")
+            .helper(tr(store, |c| c.editor_listeners_help))
+            .error(problem_on(store, |problem| {
+                matches!(problem, FormProblem::Listener(_))
+            }))
+            .mono()
+            .test_id("editor-listeners"),
+        )
+        .child(when(
+            move || console.listeners_expose_all(),
+            move || {
+                callout(
+                    CalloutKind::Warning,
+                    tr(store, |c| c.editor_listeners_exposed),
+                )
+            },
+        ))
+}
+
+/// What the node shares and how traffic leaves it: subnets, exit nodes, SOCKS5, port forwards, the VPN portal,
+/// manual routes and the receive rate limit.
+fn sharing(store: Store) -> View {
+    let console = store.console();
+    let fields = console.editor_fields();
+    view()
+        .gap_4()
+        .child(
+            field(
+                tr(store, |c| c.editor_proxy),
+                move || fields.proxy_cidrs.get(),
+                move |text| fields.proxy_cidrs.set(text.to_owned()),
+            )
+            .multiline(3)
+            .placeholder("192.168.1.0/24->10.50.0.0/24")
+            .helper(tr(store, |c| c.editor_proxy_help))
+            .error(problem_on(store, |problem| {
+                matches!(problem, FormProblem::Proxy(_))
+            }))
+            .mono()
+            .test_id("editor-proxy"),
+        )
+        .child(when(
+            move || !fields.proxy_cidrs.get().trim().is_empty(),
+            move || callout(CalloutKind::Warning, tr(store, |c| c.editor_proxy_exposed)),
+        ))
+        .child(
+            switch_row(
+                tr(store, |c| c.editor_exit_node),
+                move || fields.exit_node.get(),
+                move |on| fields.exit_node.set(on),
+            )
+            .description(tr(store, |c| c.editor_exit_node_help))
+            .exposure(tr(store, |c| c.editor_exit_exposed))
+            .test_id("editor-exit-node"),
+        )
+        .child(
+            field(
+                tr(store, |c| c.editor_exit_nodes),
+                move || fields.exit_nodes.get(),
+                move |text| fields.exit_nodes.set(text.to_owned()),
+            )
+            .multiline(2)
+            .placeholder("10.144.144.2")
+            .helper(tr(store, |c| c.editor_exit_nodes_help))
+            .error(problem_on(store, |problem| {
+                matches!(problem, FormProblem::ExitNode(_))
+            }))
+            .mono()
+            .test_id("editor-exit-nodes"),
+        )
+        .child(
+            switch_row(
+                tr(store, |c| c.editor_socks5),
+                move || fields.socks5.get(),
+                move |on| fields.socks5.set(on),
+            )
+            .description(tr(store, |c| c.editor_socks5_help))
+            .exposure(tr(store, |c| c.editor_socks5_exposed))
+            .test_id("editor-socks5"),
+        )
+        .child(when(
+            move || fields.socks5.get(),
+            move || {
+                field(
+                    tr(store, |c| c.editor_socks5_port),
+                    move || fields.socks5_port.get(),
+                    move |text| fields.socks5_port.set(text.to_owned()),
+                )
+                .placeholder("1080")
+                .error(problem_on(store, |problem| {
+                    matches!(problem, FormProblem::Socks5Port)
+                }))
+                .mono()
+                .test_id("editor-socks5-port")
+            },
+        ))
+        .child(
+            field(
+                tr(store, |c| c.editor_forwards),
+                move || fields.forwards.get(),
+                move |text| fields.forwards.set(text.to_owned()),
+            )
+            .multiline(3)
+            .placeholder("tcp 127.0.0.1:8080 10.144.144.2:80")
+            .helper(store.tr(|s| s.config.port_forwards_help))
+            .error(problem_on(store, |problem| {
+                matches!(problem, FormProblem::Forward(_))
+            }))
+            .mono()
+            .test_id("editor-forwards"),
+        )
+        .child(when(
+            move || console.forwards_public(),
+            move || {
+                callout(
+                    CalloutKind::Warning,
+                    tr(store, |c| c.editor_forwards_exposed),
+                )
+            },
+        ))
+        .child(when(
+            move || console.forwards_unreadable(),
+            move || {
+                callout(
+                    CalloutKind::Warning,
+                    tr(store, |c| c.editor_forwards_unreadable),
+                )
+                .test_id("editor-forwards-unreadable")
+            },
+        ))
+        .child(
+            switch_row(
+                store.tr(|s| s.config.vpn_portal),
+                move || console.vpn_portal_on(),
+                move |on| fields.vpn_on.set(on),
+            )
+            .description(store.tr(|s| s.config.vpn_portal_help))
+            .exposure(store.tr(|s| s.config.vpn_portal_exposure))
+            .test_id("editor-vpn"),
+        )
+        .child(when(
+            move || console.vpn_portal_on(),
+            move || {
+                view()
+                    .gap_4()
+                    .child(
+                        field(
+                            store.tr(|s| s.config.vpn_portal_cidr),
+                            move || fields.vpn_cidr.get(),
+                            move |text| fields.vpn_cidr.set(text.to_owned()),
+                        )
+                        .placeholder("10.14.14.0/24")
+                        .helper(store.tr(|s| s.config.vpn_portal_cidr_help))
+                        .error(problem_on(store, |problem| {
+                            matches!(problem, FormProblem::VpnCidr)
+                        }))
+                        .mono()
+                        .test_id("editor-vpn-cidr"),
+                    )
+                    .child(
+                        field(
+                            store.tr(|s| s.config.vpn_portal_port),
+                            move || fields.vpn_port.get(),
+                            move |text| fields.vpn_port.set(text.to_owned()),
+                        )
+                        .placeholder("22022")
+                        .error(problem_on(store, |problem| {
+                            matches!(problem, FormProblem::VpnPort)
+                        }))
+                        .mono()
+                        .test_id("editor-vpn-port"),
+                    )
+            },
+        ))
+        .child(
+            switch_row(
+                store.tr(|s| s.config.manual_routes),
+                move || fields.routes_on.get(),
+                move |on| fields.routes_on.set(on),
+            )
+            .description(store.tr(|s| s.config.manual_routes_help))
+            .test_id("editor-routes-on"),
+        )
+        .child(when(
+            move || fields.routes_on.get(),
+            move || {
+                field(
+                    store.tr(|s| s.config.manual_routes_field),
+                    move || fields.routes.get(),
+                    move |text| fields.routes.set(text.to_owned()),
+                )
+                .multiline(3)
+                .placeholder("192.168.0.0/16")
+                .error(problem_on(store, |problem| {
+                    matches!(problem, FormProblem::Route(_))
+                }))
+                .mono()
+                .test_id("editor-routes")
+            },
+        ))
+        .child(
+            field(
+                store.tr(|s| s.config.recv_limit),
+                move || fields.recv_limit.get(),
+                move |text| fields.recv_limit.set(text.to_owned()),
+            )
+            .placeholder(store.strings().config.recv_limit_placeholder)
+            .helper(store.tr(|s| s.config.recv_limit_help))
+            .error(problem_on(store, |problem| {
+                matches!(problem, FormProblem::RecvLimit)
+            }))
+            .mono()
+            .test_id("editor-recv-limit"),
+        )
+}
+
+/// Relaying for other nodes and networks: control traffic for every peer, private mode and the network whitelist.
+fn relaying(store: Store) -> View {
+    let console = store.console();
+    let fields = console.editor_fields();
+    view()
+        .gap_4()
+        .child(
+            switch_row(
+                tr(store, |c| c.editor_relay_all_rpc),
+                move || fields.relay_all_rpc.get(),
+                move |on| fields.relay_all_rpc.set(on),
+            )
+            .description(tr(store, |c| c.editor_relay_all_rpc_help))
+            .exposure(tr(store, |c| c.editor_relay_all_rpc_exposed))
+            .test_id("editor-relay-all-rpc"),
+        )
+        .child(
+            switch_row(
+                tr(store, |c| c.editor_private_mode),
+                move || fields.private_mode.get(),
+                move |on| fields.private_mode.set(on),
+            )
+            .description(tr(store, |c| c.editor_private_mode_help))
+            .test_id("editor-private-mode"),
+        )
+        .child(when(
+            move || !fields.private_mode.get(),
+            move || {
+                callout(
+                    CalloutKind::Warning,
+                    tr(store, |c| c.editor_private_mode_off),
+                )
+                .test_id("editor-private-mode-off")
+            },
+        ))
+        .child(
+            switch_row(
+                tr(store, |c| c.editor_whitelist),
+                move || fields.whitelist_on.get(),
+                move |on| fields.whitelist_on.set(on),
+            )
+            .description(tr(store, |c| c.editor_whitelist_help))
+            .test_id("editor-whitelist-on"),
+        )
+        .child(when(
+            move || fields.whitelist_on.get(),
+            move || {
+                field(
+                    tr(store, |c| c.editor_whitelist_field),
+                    move || fields.whitelist.get(),
+                    move |text| fields.whitelist.set(text.to_owned()),
+                )
+                .multiline(3)
+                .placeholder("office-*")
+                .helper(tr(store, |c| c.editor_whitelist_field_help))
+                .error(problem_on(store, |problem| {
+                    matches!(problem, FormProblem::Whitelist(_))
+                }))
+                .mono()
+                .test_id("editor-whitelist")
+            },
+        ))
+}
+
+/// Access control: the shared editor, or a note when the server's rules are ones this app cannot read (they are
+/// kept as they are).
+fn access(store: Store) -> View {
+    let console = store.console();
+    let fields = console.editor_fields();
+    view().child(dynamic(move || {
+        if fields.acl_unreadable.get() {
+            callout(CalloutKind::Warning, tr(store, |c| c.editor_acl_unreadable))
+                .test_id("editor-acl-unreadable")
+                .into_element()
+        } else {
+            untracked(|| {
+                acl_editor(
+                    store,
+                    move || fields.acl.get(),
+                    move |acl| fields.acl.set(acl),
+                    false,
+                    "editor",
+                )
+                .into_element()
+            })
+        }
+    }))
 }

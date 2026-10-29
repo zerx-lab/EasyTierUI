@@ -20,6 +20,7 @@ use super::{
     model::{NetworkProfile, ProfileId, random_uuid},
 };
 use crate::core::{
+    acl::GroupSecrets,
     keychain::{KeychainError, SecretStore},
     secret::Secret,
 };
@@ -55,6 +56,9 @@ pub enum RepoError {
     /// The profile could not be written as JSON (a bug).
     #[error("the profile could not be written")]
     Serialize,
+    /// The stored ACL group secrets are not what this app wrote.
+    #[error("the stored ACL group secrets could not be read")]
+    GroupSecrets,
 }
 
 /// The key-value storage the profile list lives in: NSH's [`NshStorage`] in the app, [`MemoryKv`] in tests.
@@ -254,6 +258,39 @@ pub fn load_secret(
     Ok(secrets.get(&profile.secret_account())?)
 }
 
+/// The ACL group secrets of `profile` from the keychain; none when nothing is stored.
+///
+/// # Errors
+///
+/// [`RepoError::Keychain`]; [`RepoError::GroupSecrets`] when the stored value is not readable.
+pub fn load_group_secrets(
+    secrets: &dyn SecretStore,
+    profile: &NetworkProfile,
+) -> Result<GroupSecrets, RepoError> {
+    match secrets.get(&profile.id.acl_group_secrets_account())? {
+        Some(value) => GroupSecrets::from_keychain(&value).map_err(|_| RepoError::GroupSecrets),
+        None => Ok(GroupSecrets::default()),
+    }
+}
+
+/// Keeps the ACL group secrets of `profile` in the keychain as one entry; an empty set deletes the entry.
+///
+/// # Errors
+///
+/// [`RepoError::Keychain`]; [`RepoError::GroupSecrets`] if the secrets cannot be encoded.
+pub fn save_group_secrets(
+    secrets: &dyn SecretStore,
+    profile: &NetworkProfile,
+    groups: &GroupSecrets,
+) -> Result<(), RepoError> {
+    let account = profile.id.acl_group_secrets_account();
+    if groups.is_empty() {
+        return Ok(secrets.delete(&account)?);
+    }
+    let value = groups.to_keychain().map_err(|_| RepoError::GroupSecrets)?;
+    Ok(secrets.set(&account, &value)?)
+}
+
 /// Stores a profile and its secret: the secret first (a profile without its secret is worse than a secret without
 /// a profile), then the entry. Without a `secret` the keychain is left alone.
 ///
@@ -273,8 +310,8 @@ pub fn save(
     save_profile(kv, profile)
 }
 
-/// Deletes a profile: both of its keychain entries (the network secret and the control-plane address), then its
-/// stored entry. If the keychain refuses, the profile stays so the deletion can be retried.
+/// Deletes a profile: its keychain entries (the network secret, the control-plane address and the ACL group
+/// secrets), then its stored entry. If the keychain refuses, the profile stays so the deletion can be retried.
 ///
 /// # Errors
 ///
@@ -286,6 +323,7 @@ pub fn delete_profile(
 ) -> Result<(), RepoError> {
     secrets.delete(&id.network_secret_account())?;
     secrets.delete(&id.config_server_account())?;
+    secrets.delete(&id.acl_group_secrets_account())?;
     remove_profile(kv, id)?;
     Ok(())
 }
@@ -529,6 +567,89 @@ mod tests {
             Err(RepoError::Keychain(_))
         ));
         assert_eq!(load_profiles(&kv).unwrap().profiles.len(), 1);
+    }
+
+    #[test]
+    fn profiles_stored_before_the_flags_existed_still_load() {
+        let kv = MemoryKv::default();
+        let old = serde_json::json!({
+            "id": "a".repeat(32),
+            "name": "Old",
+            "network_name": "old-net",
+            "latency_first": true,
+            "accept_dns": true,
+            "subnet_proxy": ["192.168.50.0/24"],
+            "multi_thread": true,
+        });
+        let list = serde_json::json!({"version": SCHEMA_VERSION, "profiles": [old]});
+        kv.set(PROFILES_KEY, list.to_string()).unwrap();
+        let loaded = load_profiles(&kv).unwrap();
+        assert_eq!(loaded.skipped, 0);
+        let p = loaded.profiles.first().unwrap();
+        assert!(p.flags.latency_first && p.flags.accept_dns);
+        assert!(p.flags.bind_device && p.flags.multi_thread);
+        assert!(!p.flags.disable_p2p && !p.flags.proxy_forward_by_system);
+        assert_eq!(
+            p.subnet_proxy,
+            vec![crate::profile::model::SubnetProxy::plain(
+                "192.168.50.0/24".parse().unwrap()
+            )]
+        );
+        assert_eq!(p.manual_routes, None);
+        assert_eq!(p.vpn_portal, None);
+        assert_eq!(p.acl, None);
+        assert!(p.mapped_listeners.is_empty());
+    }
+
+    #[test]
+    fn group_secrets_rest_in_one_keychain_entry_and_leave_with_the_profile() {
+        let kv = MemoryKv::default();
+        let secrets = MemoryStore::default();
+        let (p, groups) = crate::profile::testing::full_profile().unwrap();
+        assert_eq!(
+            load_group_secrets(&secrets, &p).unwrap(),
+            GroupSecrets::default()
+        );
+
+        save(&kv, &secrets, &p, Some(&secret())).unwrap();
+        save_group_secrets(&secrets, &p, &groups).unwrap();
+        assert_eq!(load_group_secrets(&secrets, &p).unwrap(), groups);
+        assert_eq!(
+            p.id.acl_group_secrets_account(),
+            format!("profile/{}/acl-group-secrets", p.id.as_str())
+        );
+        // The stored profile list holds the declared group names, never their secrets.
+        let stored = kv.get(PROFILES_KEY).unwrap();
+        assert!(stored.contains("admins"));
+        assert!(!stored.contains("example-group-secret"));
+
+        // An empty set deletes the entry.
+        save_group_secrets(&secrets, &p, &GroupSecrets::default()).unwrap();
+        assert_eq!(
+            secrets.get(&p.id.acl_group_secrets_account()).unwrap(),
+            None
+        );
+
+        save_group_secrets(&secrets, &p, &groups).unwrap();
+        delete_profile(&kv, &secrets, &p.id).unwrap();
+        assert_eq!(
+            secrets.get(&p.id.acl_group_secrets_account()).unwrap(),
+            None
+        );
+        assert_eq!(secrets.get(&p.id.network_secret_account()).unwrap(), None);
+    }
+
+    #[test]
+    fn an_unreadable_group_secrets_entry_is_reported() {
+        let secrets = MemoryStore::default();
+        let p = profile('a');
+        secrets
+            .set(&p.id.acl_group_secrets_account(), &Secret::new("not json"))
+            .unwrap();
+        assert_eq!(
+            load_group_secrets(&secrets, &p),
+            Err(RepoError::GroupSecrets)
+        );
     }
 
     #[cfg(not(target_arch = "wasm32"))]

@@ -18,7 +18,7 @@ use nsh_app_easytierui::{
     },
     store::node::testing,
 };
-use nsh_engine::Os;
+use nsh_engine::{Os, StorageChange};
 use nsh_testing::{DialogAnswer, Headless};
 
 use crate::Device;
@@ -272,14 +272,181 @@ fn enrolling_in_a_control_plane_explains_what_it_changes() {
     app.wait_for("id:managed-server-error").unwrap();
 }
 
-#[test]
-fn the_web_build_cannot_be_a_node_and_says_where_to_go() {
-    let mut app = Device::desktop(Os::Web, 1200.0).start().unwrap();
-    app.press("id:page-networks").unwrap();
-    app.wait_for("This browser can't join a network.").unwrap();
-    assert!(!app.screen().matches("id:networks-create").unwrap());
-    app.press("id:page-peers").unwrap();
-    app.wait_for("This browser can't join a network.").unwrap();
+/// The web build's Node pages: a browser cannot join a network, so they manage a machine of the serving server.
+mod web {
+    use std::{sync::Arc, time::Duration};
+
+    use nsh_engine::{HttpRequest, Os, StorageBackend as _};
+    use nsh_testing::{StubNetwork, StubReply, StubResponse, StubRoute};
+    use serde_json::{Value, json};
+
+    use crate::{
+        Device,
+        console::{INSTANCE, MACHINE, fixture, reply, route, server, sign_in, start},
+    };
+
+    /// The second machine's id.
+    const OTHER: &str = "00000000-0000-0000-0000-000000000002";
+
+    /// The captured machine list with a second machine, `second-host`, next to it.
+    fn two_machines() -> Vec<u8> {
+        let mut list: Value = serde_json::from_slice(&fixture("web-machines.json")).unwrap();
+        let mut second = list["machines"][0].clone();
+        second["info"]["machine_id"] = json!({"part1": 0, "part2": 0, "part3": 0, "part4": 2});
+        second["info"]["hostname"] = json!("second-host");
+        list["machines"].as_array_mut().unwrap().push(second);
+        serde_json::to_vec(&list).unwrap()
+    }
+
+    /// A server with two machines: the captured network runs on the first, the second has none.
+    fn server_with_two_machines() -> Arc<StubNetwork> {
+        let peers = fixture("web-list-peer.json");
+        let rpc = StubRoute::Handler(Arc::new(move |_: HttpRequest, answer: StubReply| {
+            let mut response = StubResponse::default();
+            response.status = 200;
+            response.body = peers.clone();
+            answer.send(response);
+        }));
+        Arc::new(StubNetwork::new([
+            route("GET", "/api/v1/auth/check_login_status", reply(401, b"")),
+            route("POST", "/api/v1/auth/login", reply(200, b"{}")),
+            route("GET", "/api/v1/machines", reply(200, &two_machines())),
+            route(
+                "GET",
+                &format!("/api/v1/machines/{MACHINE}/networks"),
+                reply(200, &fixture("web-list-networks.json")),
+            ),
+            route(
+                "POST",
+                &format!("/api/v1/machines/{MACHINE}/networks/metas"),
+                reply(200, &fixture("web-metas.json")),
+            ),
+            route(
+                "GET",
+                &format!("/api/v1/machines/{MACHINE}/networks/info/{INSTANCE}"),
+                reply(200, &fixture("web-info-one.json")),
+            ),
+            route(
+                "POST",
+                &format!("/api/v1/machines/{MACHINE}/proxy-rpc"),
+                rpc,
+            ),
+            route(
+                "GET",
+                &format!("/api/v1/machines/{OTHER}/networks"),
+                reply(200, br#"{"running_inst_ids":[],"disabled_inst_ids":[]}"#),
+            ),
+        ]))
+    }
+
+    #[test]
+    fn the_web_build_asks_to_sign_in_instead_of_saying_it_cannot_be_a_node() {
+        let mut app = Device::desktop(Os::Web, 1200.0).start().unwrap();
+        app.press("id:page-networks").unwrap();
+        app.wait_for("Sign in to manage this server").unwrap();
+        assert!(!app.shows("This browser can't join a network."));
+        app.press("id:page-peers").unwrap();
+        app.wait_for("Sign in to manage this server").unwrap();
+        assert!(!app.shows("This browser can't join a network."));
+    }
+
+    #[test]
+    fn the_networks_page_lists_the_picked_machines_networks_and_remembers_the_pick() {
+        let stub = server_with_two_machines();
+        let device = Device::desktop(Os::Web, 1200.0);
+        let mut app = start(&device, &stub);
+        sign_in(&mut app);
+        app.wait_for("example-host-m").unwrap();
+        app.press("id:page-networks").unwrap();
+        // Two machines and none chosen: the page asks which one.
+        app.wait_for("Choose a machine").unwrap();
+        assert!(
+            !app.screen()
+                .matches(&format!("id:network-{INSTANCE}"))
+                .unwrap()
+        );
+
+        app.press("id:web-node-machine").unwrap();
+        app.wait_for(&format!("id:web-node-machine-{MACHINE}"))
+            .unwrap();
+        app.press(&format!(
+            "id:web-node-machine-{MACHINE} >> text:example-host-m"
+        ))
+        .unwrap();
+        app.wait_for(&format!("id:network-{INSTANCE}")).unwrap();
+        assert!(app.screen().matches("id:web-node-create").unwrap());
+        assert!(app.screen().matches("id:web-node-import").unwrap());
+
+        let kept = device.storage.load().unwrap();
+        assert!(
+            kept.iter()
+                .any(|(key, value)| key.starts_with("web.node.machine.") && value == MACHINE),
+            "{kept:?}"
+        );
+
+        // After a restart the same machine is managed without choosing it again.
+        let mut again = start(&device, &stub);
+        sign_in(&mut again);
+        again.press("id:page-networks").unwrap();
+        again.wait_for(&format!("id:network-{INSTANCE}")).unwrap();
+    }
+
+    #[test]
+    fn the_only_machine_is_managed_without_choosing_and_creating_opens_the_editor_for_it() {
+        let stub = server();
+        let mut app = start(&Device::desktop(Os::Web, 1200.0), &stub);
+        sign_in(&mut app);
+        app.wait_for("example-host-m").unwrap();
+        app.press("id:page-networks").unwrap();
+        app.wait_for("id:web-node-create").unwrap();
+        app.press("id:web-node-create >> text:/Create network/")
+            .unwrap();
+        app.wait_for("id:network-editor").unwrap();
+    }
+
+    #[test]
+    fn the_peers_page_shows_the_peers_of_the_picked_machines_network() {
+        let stub = server_with_two_machines();
+        let mut app = start(&Device::desktop(Os::Web, 1200.0), &stub);
+        sign_in(&mut app);
+        app.wait_for("example-host-m").unwrap();
+        app.press("id:page-peers").unwrap();
+        app.wait_for("Choose a machine").unwrap();
+        app.press("id:web-node-machine").unwrap();
+        app.wait_for(&format!("id:web-node-machine-{MACHINE}"))
+            .unwrap();
+        app.press(&format!(
+            "id:web-node-machine-{MACHINE} >> text:example-host-m"
+        ))
+        .unwrap();
+        app.wait_for("id:machine-peers-network").unwrap();
+        app.press("id:machine-peers-network").unwrap();
+        app.wait_for(&format!("id:machine-peers-network-{INSTANCE}"))
+            .unwrap();
+        app.press(&format!("id:machine-peers-network-{INSTANCE} >> text:/./"))
+            .unwrap();
+        app.wait_for("365717954").unwrap();
+        assert!(app.screen().matches("text:/Direct/").unwrap());
+    }
+
+    #[test]
+    fn a_server_without_machines_explains_how_a_node_enrolls() {
+        let stub = Arc::new(StubNetwork::new([
+            route("GET", "/api/v1/auth/check_login_status", reply(401, b"")),
+            route("POST", "/api/v1/auth/login", reply(200, b"{}")),
+            route("GET", "/api/v1/machines", reply(200, br#"{"machines":[]}"#)),
+        ]));
+        let mut app = start(&Device::desktop(Os::Web, 1200.0), &stub);
+        sign_in(&mut app);
+        app.press("id:page-networks").unwrap();
+        app.wait_for("No machine is enrolled yet").unwrap();
+        assert!(app.screen().matches("text:/--config-server/").unwrap());
+        app.press("Open Machines").unwrap();
+        app.wait_until("the Machines page opened", Duration::from_secs(5), |app| {
+            app.selected("id:page-machines").unwrap_or(false)
+        })
+        .unwrap();
+    }
 }
 
 #[test]
@@ -403,6 +570,181 @@ fn the_network_drawer_edits_settings_and_warns_about_exposure() {
     app.wait_for_gone("id:network-drawer", Duration::from_secs(2))
         .unwrap();
     assert!(stored_profiles(&device).contains("\"offers_exit_node\":true"));
+}
+
+#[test]
+fn feature_switches_are_saved_in_the_profile() {
+    let device = Device::desktop(Os::MacOs, 1200.0);
+    let mut app = device.start().unwrap();
+    create_network(&mut app, "Home lab");
+    open_settings(&mut app);
+    // The old one-off switches are gone: the grid covers them.
+    for id in [
+        "detail-latency-first",
+        "detail-magic-dns",
+        "detail-multi-thread",
+    ] {
+        assert!(!app.screen().matches(&format!("id:{id}")).unwrap());
+    }
+    for id in [
+        "bind_device",
+        "enable_kcp_proxy",
+        "latency_first",
+        "accept_dns",
+    ] {
+        app.wait_for(&format!("id:detail-flag-{id}")).unwrap();
+    }
+    assert!(!stored_profiles(&device).contains("\"enable_kcp_proxy\":true"));
+
+    app.press("id:detail-flag-bind_device >> role:switch")
+        .unwrap();
+    app.press("id:detail-flag-enable_kcp_proxy >> role:switch")
+        .unwrap();
+    app.press("id:detail-save >> text:Save").unwrap();
+    app.wait_for_gone("id:network-drawer", Duration::from_secs(2))
+        .unwrap();
+    let stored = stored_profiles(&device);
+    assert!(stored.contains("\"bind_device\":false"));
+    assert!(stored.contains("\"enable_kcp_proxy\":true"));
+}
+
+#[test]
+fn the_vpn_portal_warns_that_it_listens_everywhere_and_is_saved() {
+    let device = Device::desktop(Os::MacOs, 1200.0);
+    let mut app = device.start().unwrap();
+    create_network(&mut app, "Home lab");
+    open_settings(&mut app);
+    assert!(!app.screen().matches("id:detail-vpn-portal-cidr").unwrap());
+    assert!(
+        !app.screen()
+            .matches("id:detail-vpn-portal-warning")
+            .unwrap()
+    );
+
+    app.press("id:detail-vpn-portal >> role:switch").unwrap();
+    app.wait_for("id:detail-vpn-portal-warning").unwrap();
+    app.wait_for("id:detail-vpn-portal-cidr").unwrap();
+    assert_eq!(
+        app.screen()
+            .input_text("id:detail-vpn-portal-port")
+            .unwrap(),
+        Some("22022")
+    );
+
+    // Switched on without a client subnet, the network cannot be saved.
+    app.press("id:detail-save >> text:Save").unwrap();
+    app.wait_for("id:detail-vpn-portal-cidr-error").unwrap();
+    assert!(app.screen().matches("id:network-drawer").unwrap());
+    assert!(!stored_profiles(&device).contains("\"vpn_portal\":{"));
+
+    app.type_text("id:detail-vpn-portal-cidr", "10.14.14.0/24")
+        .unwrap();
+    app.wait_for_gone("id:detail-vpn-portal-cidr-error", Duration::from_secs(2))
+        .unwrap();
+    app.press("id:detail-save >> text:Save").unwrap();
+    app.wait_for_gone("id:network-drawer", Duration::from_secs(2))
+        .unwrap();
+    assert!(
+        stored_profiles(&device)
+            .contains("\"vpn_portal\":{\"client_cidr\":\"10.14.14.0/24\",\"listen_port\":22022}")
+    );
+}
+
+#[test]
+fn an_access_control_rule_is_added_through_its_dialog_and_saved() {
+    let device = Device::desktop(Os::MacOs, 1200.0);
+    let mut app = device.start().unwrap();
+    create_network(&mut app, "Home lab");
+    open_settings(&mut app);
+    app.wait_for("id:detail-acl-switch").unwrap();
+    assert!(!app.screen().matches("id:detail-acl-add-inbound").unwrap());
+
+    app.press("id:detail-acl-switch >> role:switch").unwrap();
+    app.wait_for("id:detail-acl-add-inbound").unwrap();
+    app.press("id:detail-acl-add-inbound >> text:Add inbound chain")
+        .unwrap();
+    app.wait_for("id:detail-acl-chain-0-add-rule").unwrap();
+    app.press("id:detail-acl-chain-0-add-rule >> text:Add rule")
+        .unwrap();
+    app.wait_for("id:detail-acl-rule-dialog").unwrap();
+    app.type_text("id:detail-acl-rule-name", "Allow SSH")
+        .unwrap();
+    app.press("id:detail-acl-rule-save >> text:Save").unwrap();
+    app.wait_for_gone("id:detail-acl-rule-dialog", Duration::from_secs(2))
+        .unwrap();
+    app.wait_for("id:detail-acl-rule-0-0").unwrap();
+    assert!(app.shows("Allow SSH"));
+
+    app.press("id:detail-save >> text:Save").unwrap();
+    app.wait_for_gone("id:network-drawer", Duration::from_secs(2))
+        .unwrap();
+    let stored = stored_profiles(&device);
+    assert!(stored.contains("\"acl\":{"));
+    assert!(stored.contains("Allow SSH"));
+}
+
+#[test]
+fn a_bad_route_or_receive_limit_names_its_field_and_blocks_saving() {
+    let device = Device::desktop(Os::MacOs, 1200.0);
+    let mut app = device.start().unwrap();
+    create_network(&mut app, "Home lab");
+    open_settings(&mut app);
+
+    app.press("id:detail-routes-on >> role:switch").unwrap();
+    app.wait_for("id:detail-routes").unwrap();
+    app.type_text("id:detail-routes", "not a route").unwrap();
+    app.wait_for("id:detail-routes-error").unwrap();
+    app.type_text("id:detail-recv-limit", "fast").unwrap();
+    app.wait_for("id:detail-recv-limit-error").unwrap();
+    app.press("id:detail-save >> text:Save").unwrap();
+    assert!(app.screen().matches("id:network-drawer").unwrap());
+    assert!(!stored_profiles(&device).contains("\"manual_routes\":["));
+
+    // Manual routing with no entry at all is valid: it means no routes.
+    app.clear("id:detail-routes").unwrap();
+    app.wait_for_gone("id:detail-routes-error", Duration::from_secs(2))
+        .unwrap();
+    app.clear("id:detail-recv-limit").unwrap();
+    app.type_text("id:detail-recv-limit", "1048576").unwrap();
+    app.wait_for_gone("id:detail-recv-limit-error", Duration::from_secs(2))
+        .unwrap();
+    app.press("id:detail-save >> text:Save").unwrap();
+    app.wait_for_gone("id:network-drawer", Duration::from_secs(2))
+        .unwrap();
+    let stored = stored_profiles(&device);
+    assert!(stored.contains("\"manual_routes\":[]"));
+    assert!(stored.contains("\"instance_recv_bps_limit\":1048576"));
+}
+
+#[test]
+fn a_managed_network_shows_no_feature_switches_or_access_control() {
+    use nsh_engine::StorageBackend as _;
+
+    let device = Device::desktop(Os::MacOs, 1200.0);
+    {
+        let mut app = device.start().unwrap();
+        create_network(&mut app, "Home lab");
+    }
+    let local = stored_profiles(&device);
+    let managed = local.replace("\"source\":\"local\"", "\"source\":\"managed\"");
+    assert_ne!(local, managed);
+    device
+        .storage
+        .write(StorageChange::Set(PROFILES_KEY.to_owned(), managed));
+
+    let mut app = device.start().unwrap();
+    open_settings(&mut app);
+    app.wait_for("id:managed-note").unwrap();
+    app.wait_for("id:detail-network-name").unwrap();
+    for id in [
+        "detail-flag-bind_device",
+        "detail-acl-switch",
+        "detail-vpn-portal",
+        "detail-recv-limit",
+        "detail-mapped-listeners",
+    ] {
+        assert!(!app.screen().matches(&format!("id:{id}")).unwrap(), "{id}");
+    }
 }
 
 #[test]

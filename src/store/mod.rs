@@ -2,9 +2,11 @@
 //! state only through the functions here; each target keeps its own page, so switching targets loses nothing.
 //!
 //! Each role keeps its state in its own sub-store (`node`, `console`, `host`, `versions`), reached through
-//! [`Store::node`] and friends; the root keeps what the shell needs: targets, pages, language, work mode, sidebar.
+//! [`Store::node`] and friends, and the desktop app's own behavior (tray, login item) is `desktop`; the root keeps what
+//! the shell needs: targets, pages, language, work mode, sidebar.
 
 pub mod console;
+pub mod desktop;
 pub mod host;
 pub mod node;
 pub mod versions;
@@ -13,7 +15,10 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use nsh_core::{prelude::*, storage::Storage};
 
-pub use self::{console::ConsoleStore, host::HostStore, node::NodeStore, versions::VersionStore};
+pub use self::{
+    console::ConsoleStore, desktop::DesktopStore, host::HostStore, node::NodeStore,
+    versions::VersionStore,
+};
 use crate::{
     core::{
         keychain::{SecretStore, system_store},
@@ -197,6 +202,7 @@ pub struct Store {
     node: NodeStore,
     console: ConsoleStore,
     host: HostStore,
+    desktop: DesktopStore,
     versions: VersionStore,
 }
 
@@ -244,11 +250,13 @@ impl Store {
             console: ConsoleStore::new(&env),
             host: HostStore::new(&env),
             versions,
+            desktop: DesktopStore::new(platform),
         };
         store.versions.restore(store);
         store.node.restore(store);
         store.console.restore(store);
         store.host.restore(store);
+        store.desktop.start(store);
         store
     }
 
@@ -270,6 +278,11 @@ impl Store {
     /// The EasyTier programs on this desktop.
     pub fn versions(&self) -> VersionStore {
         self.versions
+    }
+
+    /// The desktop app's own behavior: keeping to the tray, starting quietly, starting at login.
+    pub fn desktop(&self) -> DesktopStore {
+        self.desktop
     }
 
     /// Whether secrets survive a restart on this device (the UI warns where they do not).
@@ -527,7 +540,10 @@ impl Store {
 
     /// The UI's strings in the chosen or the system's language (tracked).
     pub fn strings(&self) -> &'static Strings {
-        self.language.get().resolve(locale().as_str()).strings()
+        self.language
+            .get()
+            .resolve(&crate::i18n::system_language_tag())
+            .strings()
     }
 
     /// A binding of the string `pick` chooses, following the language as it changes.

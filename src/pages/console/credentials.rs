@@ -231,6 +231,7 @@ fn machine_picker(store: Store, id: TargetId, machines: Vec<(String, String)>) -
             }
         },
     )
+    .inline()
     .test_id("credentials-machine")
     .build()
 }
@@ -265,6 +266,7 @@ fn network_picker(store: Store, id: TargetId, networks: Vec<(String, String)>) -
             }
         },
     )
+    .inline()
     .test_id("credentials-network")
     .build()
 }

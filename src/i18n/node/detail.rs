@@ -69,8 +69,10 @@ pub struct DetailStrings {
     pub section_general: &'static str,
     /// Settings section: how the node connects.
     pub section_connection: &'static str,
-    /// Settings section: advanced options.
-    pub section_advanced: &'static str,
+    /// Settings section: what this node shares and how it routes.
+    pub section_sharing: &'static str,
+    /// Settings section: relaying for other networks.
+    pub section_relaying: &'static str,
     /// Settings section: deleting the network.
     pub section_remove: &'static str,
     /// The secret is not saved on this device.
@@ -121,22 +123,6 @@ pub struct DetailStrings {
     pub mtu_help: &'static str,
     /// Interface name: what it is and what empty means.
     pub dev_name_help: &'static str,
-    /// Switch: prefer the fastest route.
-    pub latency_first: &'static str,
-    /// Switch: what the fastest route means.
-    pub latency_first_help: &'static str,
-    /// Switch: never connect peers directly.
-    pub disable_p2p: &'static str,
-    /// Switch: what turning direct connections off does.
-    pub disable_p2p_help: &'static str,
-    /// Switch: peer names resolve through EasyTier.
-    pub magic_dns: &'static str,
-    /// Switch: what the name service does.
-    pub magic_dns_help: &'static str,
-    /// Switch: several threads.
-    pub multi_thread: &'static str,
-    /// Switch: what several threads do.
-    pub multi_thread_help: &'static str,
     /// Switch: offer this node as an exit node.
     pub offers_exit: &'static str,
     /// Switch: what an exit node is.
@@ -163,8 +149,6 @@ pub struct DetailStrings {
     pub forwards_switch: &'static str,
     /// Switch: what a forward does.
     pub forwards_switch_help: &'static str,
-    /// Forwards: the format, one per line.
-    pub forwards_help: &'static str,
     /// Switch: relay every peer's control traffic.
     pub relay_all_rpc: &'static str,
     /// Switch: what relaying control traffic means.
@@ -263,7 +247,8 @@ pub(super) static EN: DetailStrings = DetailStrings {
 
     section_general: "General",
     section_connection: "Connection",
-    section_advanced: "Advanced",
+    section_sharing: "Sharing and routing",
+    section_relaying: "Relaying",
     section_remove: "Remove",
     secret_missing: "The secret of this network isn't saved on this device. Enter it again to save it.",
     name_help: "Only you see this name, on this device.",
@@ -289,14 +274,6 @@ pub(super) static EN: DetailStrings = DetailStrings {
     encryption_help: "Every peer in the network must use the same setting, or they can't talk to each other.",
     mtu_help: "Leave it empty to use EasyTier's default.",
     dev_name_help: "The name of the network interface. Leave it empty to let the system choose.",
-    latency_first: "Prefer the fastest route",
-    latency_first_help: "Chooses the route with the lowest latency, even if it takes more hops.",
-    disable_p2p: "Never connect directly",
-    disable_p2p_help: "All traffic goes through relays. Use it only if direct links cause trouble.",
-    magic_dns: "Resolve peer names",
-    magic_dns_help: "Peers can be reached by their hostname through EasyTier's own name service.",
-    multi_thread: "Use several threads",
-    multi_thread_help: "Spreads the work over more processor cores. It helps on fast links and uses more power.",
     offers_exit: "Offer this node as an exit node",
     offers_exit_help: "Peers that choose this node send their internet traffic out through it.",
     uses_exit: "Send my traffic through exit nodes",
@@ -304,13 +281,12 @@ pub(super) static EN: DetailStrings = DetailStrings {
     exit_nodes_help: "The virtual IP of each exit node, one per line.",
     subnet_switch: "Share subnets",
     subnet_switch_help: "Makes networks behind this device reachable for all peers.",
-    subnets_help: "One subnet per line, such as the LAN behind this device.",
+    subnets_help: "One subnet per line, such as the LAN behind this device. Write 192.168.50.0/24->10.50.0.0/24 to show peers the subnet as another range of the same size.",
     socks5_switch: "SOCKS5 proxy",
     socks5_switch_help: "Apps that speak SOCKS5 reach the network through this proxy.",
     socks5_help: "A port keeps the proxy on this device. Enter address:port to listen elsewhere.",
     forwards_switch: "Forward ports",
     forwards_switch_help: "A port on this device leads to an address inside the network.",
-    forwards_help: "One per line: protocol, the local address and port, then the target address and port.",
     relay_all_rpc: "Relay control traffic for every peer",
     relay_all_rpc_help: "Also passes on the control messages of peers from other networks. Only a public shared node needs this.",
     private_mode: "Private mode",
@@ -379,7 +355,8 @@ pub(super) static ZH_CN: DetailStrings = DetailStrings {
 
     section_general: "常规",
     section_connection: "连接",
-    section_advanced: "高级",
+    section_sharing: "共享与路由",
+    section_relaying: "中继",
     section_remove: "移除",
     secret_missing: "此设备上没有保存这个网络的密钥。请重新输入后保存。",
     name_help: "这个名字只在这台设备上显示。",
@@ -405,14 +382,6 @@ pub(super) static ZH_CN: DetailStrings = DetailStrings {
     encryption_help: "网络中的所有节点必须使用相同的设置，否则无法互相通信。",
     mtu_help: "留空则使用 EasyTier 的默认值。",
     dev_name_help: "虚拟网卡的名称。留空则由系统决定。",
-    latency_first: "优先选择最快的路径",
-    latency_first_help: "选择延迟最低的路径，即使要多经过几跳。",
-    disable_p2p: "不建立直连",
-    disable_p2p_help: "所有流量都经中继转发。仅在直连出问题时使用。",
-    magic_dns: "解析节点名称",
-    magic_dns_help: "通过 EasyTier 自带的域名服务，用主机名访问其他节点。",
-    multi_thread: "使用多线程",
-    multi_thread_help: "把工作分摊到更多处理器核心。链路较快时有帮助，耗电也更多。",
     offers_exit: "把这个节点作为出口节点",
     offers_exit_help: "选择此节点的对等节点会经它访问互联网。",
     uses_exit: "让我的流量经出口节点发出",
@@ -420,13 +389,12 @@ pub(super) static ZH_CN: DetailStrings = DetailStrings {
     exit_nodes_help: "每行填写一个出口节点的虚拟 IP。",
     subnet_switch: "共享子网",
     subnet_switch_help: "让这台设备背后的网络可被所有对等节点访问。",
-    subnets_help: "每行一个子网，例如这台设备所在的局域网。",
+    subnets_help: "每行一个子网，例如这台设备所在的局域网。写成 192.168.50.0/24->10.50.0.0/24，可让对等节点看到同样大小的另一个网段。",
     socks5_switch: "SOCKS5 代理",
     socks5_switch_help: "支持 SOCKS5 的应用可以通过这个代理访问网络。",
     socks5_help: "只填端口时，代理仅限这台设备使用。填写“地址:端口”可监听其他地址。",
     forwards_switch: "转发端口",
     forwards_switch_help: "把这台设备上的一个端口转到网络内的某个地址。",
-    forwards_help: "每行一条：协议、本机地址和端口、目标地址和端口。",
     relay_all_rpc: "为所有对等节点中继控制流量",
     relay_all_rpc_help: "同时转发其他网络中节点的控制消息。只有公网共享节点需要开启。",
     private_mode: "私有模式",

@@ -98,6 +98,8 @@ pub struct ConsoleStrings {
     pub err_rejected: &'static str,
     /// No answer in time.
     pub err_timeout: &'static str,
+    /// easytier-web could not reach the machine's core (it timed out or the call failed).
+    pub err_machine_no_answer: &'static str,
     /// No answer at all; `{message}`.
     pub err_network: &'static str,
     /// The reply was not what this client reads.
@@ -266,6 +268,10 @@ pub struct ConsoleStrings {
     pub net_error: &'static str,
     /// Chip: the console may not edit this network.
     pub net_read_only: &'static str,
+    /// Beside a row whose machine's last read failed: the shown data is older; `{age}` is whole seconds.
+    pub net_stale: &'static str,
+    /// The same, under a second old.
+    pub net_stale_now: &'static str,
     /// Switches a network on.
     pub net_enable: &'static str,
     /// Switches a network off.
@@ -382,8 +388,8 @@ pub struct ConsoleStrings {
     pub editor_section_connect: &'static str,
     /// Section: what the node shares.
     pub editor_section_share: &'static str,
-    /// Section: how the node behaves.
-    pub editor_section_behavior: &'static str,
+    /// Section: relaying for other nodes and networks.
+    pub editor_section_relay: &'static str,
 
     // --- The network editor ---
     /// Title when creating; `{host}`.
@@ -456,14 +462,46 @@ pub struct ConsoleStrings {
     pub editor_socks5_exposed: &'static str,
     /// SOCKS5 port field.
     pub editor_socks5_port: &'static str,
-    /// Latency-first switch.
-    pub editor_latency_first: &'static str,
+    /// MTU field.
+    pub editor_mtu: &'static str,
+    /// Helper under it.
+    pub editor_mtu_help: &'static str,
+    /// Interface name field.
+    pub editor_dev_name: &'static str,
+    /// Helper under it.
+    pub editor_dev_name_help: &'static str,
+    /// Exit nodes this node uses: field.
+    pub editor_exit_nodes: &'static str,
+    /// Helper under it.
+    pub editor_exit_nodes_help: &'static str,
+    /// Port forwards field.
+    pub editor_forwards: &'static str,
+    /// Warning for a forward that listens beyond this machine.
+    pub editor_forwards_exposed: &'static str,
+    /// Warning: forwards the server holds that this app can't read.
+    pub editor_forwards_unreadable: &'static str,
+    /// Relay-all-RPC switch.
+    pub editor_relay_all_rpc: &'static str,
     /// Its description.
-    pub editor_latency_first_help: &'static str,
-    /// Disable-P2P switch.
-    pub editor_disable_p2p: &'static str,
+    pub editor_relay_all_rpc_help: &'static str,
+    /// Its exposure warning.
+    pub editor_relay_all_rpc_exposed: &'static str,
+    /// Private mode switch.
+    pub editor_private_mode: &'static str,
     /// Its description.
-    pub editor_disable_p2p_help: &'static str,
+    pub editor_private_mode_help: &'static str,
+    /// Warning while private mode is off.
+    pub editor_private_mode_off: &'static str,
+    /// Relay whitelist switch.
+    pub editor_whitelist: &'static str,
+    /// Its description.
+    pub editor_whitelist_help: &'static str,
+    /// The whitelist's field.
+    pub editor_whitelist_field: &'static str,
+    /// Helper under it.
+    pub editor_whitelist_field_help: &'static str,
+    /// Access control the server holds that this app can't read.
+    pub editor_acl_unreadable: &'static str,
     /// Encryption select label.
     pub editor_encryption: &'static str,
     /// Peers must agree.
@@ -516,8 +554,30 @@ pub struct ConsoleStrings {
     pub problem_listener: &'static str,
     /// A subnet line is malformed; `{line}`.
     pub problem_proxy: &'static str,
+    /// An exit node line is not an IP address; `{line}`.
+    pub problem_exit_node: &'static str,
     /// The SOCKS5 port is not a port.
     pub problem_socks5_port: &'static str,
+    /// The MTU is out of range.
+    pub problem_mtu: &'static str,
+    /// The interface name is invalid.
+    pub problem_dev_name: &'static str,
+    /// The receive limit is not a positive number.
+    pub problem_recv_limit: &'static str,
+    /// A mapped listener line is malformed; `{line}`.
+    pub problem_mapped_listener: &'static str,
+    /// A manual route line is malformed; `{line}`.
+    pub problem_route: &'static str,
+    /// A whitelist line has a space; `{line}`.
+    pub problem_whitelist: &'static str,
+    /// The VPN client subnet is malformed.
+    pub problem_vpn_cidr: &'static str,
+    /// The VPN port is not a port.
+    pub problem_vpn_port: &'static str,
+    /// A port forward line is malformed; `{line}`.
+    pub problem_forward: &'static str,
+    /// The ACL has a problem (the ACL editor shows which).
+    pub problem_acl: &'static str,
     /// No TOML was pasted.
     pub problem_nothing_to_import: &'static str,
     /// A browser cannot generate a secret.
@@ -571,6 +631,7 @@ pub(super) static EN: ConsoleStrings = ConsoleStrings {
     err_machine_gone: "This machine is no longer connected to the server.",
     err_rejected: "The server refused: {message}",
     err_timeout: "The server didn't answer in time.",
+    err_machine_no_answer: "The device didn't answer the server. Check that EasyTier runs on it and its connection to the server is stable.",
     err_network: "Couldn't reach the server: {message}",
     err_decode: "The server's reply couldn't be read. It may run a different version of easytier-web.",
     err_insecure: "Plain http:// is only allowed for this machine. Use https://.",
@@ -655,6 +716,8 @@ pub(super) static EN: ConsoleStrings = ConsoleStrings {
     net_disabled: "Disabled",
     net_error: "Error",
     net_read_only: "Managed",
+    net_stale: "Not refreshed · data from {age} s ago",
+    net_stale_now: "Not refreshed",
     net_enable: "Enable",
     net_disable: "Disable",
     net_peers: "Peers",
@@ -715,7 +778,7 @@ pub(super) static EN: ConsoleStrings = ConsoleStrings {
     editor_section_identity: "Network",
     editor_section_connect: "Connectivity",
     editor_section_share: "Sharing",
-    editor_section_behavior: "Behavior",
+    editor_section_relay: "Relaying",
 
     editor_title_create: "Create network on {host}",
     editor_title_edit: "Edit network",
@@ -741,7 +804,8 @@ pub(super) static EN: ConsoleStrings = ConsoleStrings {
     editor_listeners_help: "One per line. Empty uses the core's defaults, which listen on every interface.",
     editor_listeners_exposed: "A listener on 0.0.0.0 or :: accepts connections from every network this machine is on.",
     editor_proxy: "Subnets to share",
-    editor_proxy_help: "One per line, such as 192.168.1.0/24. Peers reach these subnets through this node.",
+    editor_proxy_help: "One per line: 192.168.1.0/24, or 192.168.1.0/24->10.50.0.0/24 to show peers the second \
+                        subnet instead. Peers reach these subnets through this node.",
     editor_proxy_exposed: "Everyone in this network can reach these subnets through this node.",
     editor_no_tun: "No TUN device",
     editor_no_tun_help: "Runs without a virtual network interface, so no administrator rights are needed. The \
@@ -753,10 +817,31 @@ pub(super) static EN: ConsoleStrings = ConsoleStrings {
     editor_socks5_help: "Opens a local proxy into the network.",
     editor_socks5_exposed: "Anything that can reach this port can reach the network.",
     editor_socks5_port: "SOCKS5 port",
-    editor_latency_first: "Prefer low latency",
-    editor_latency_first_help: "Routes are chosen by latency instead of hop count.",
-    editor_disable_p2p: "Disable direct links",
-    editor_disable_p2p_help: "All traffic goes through relays.",
+    editor_mtu: "MTU",
+    editor_mtu_help: "From 400 to 1500. Empty uses the core's default.",
+    editor_dev_name: "Interface name",
+    editor_dev_name_help: "The TUN interface's name, such as et0. Empty lets the system choose.",
+    editor_exit_nodes: "Exit nodes to use",
+    editor_exit_nodes_help: "The virtual IP of each exit node, one per line. Internet traffic from this node leaves \
+                             through them.",
+    editor_forwards: "Port forwards",
+    editor_forwards_exposed: "A forward that listens on an address other than this machine's own is open to every \
+                              network this machine is on.",
+    editor_forwards_unreadable: "The server holds port forwards this app can't read. They stay as they are until you \
+                                 edit this list, then they are dropped.",
+    editor_relay_all_rpc: "Relay control traffic for every peer",
+    editor_relay_all_rpc_help: "Also passes on the control messages of peers from other networks. Only a public \
+                                shared node needs this.",
+    editor_relay_all_rpc_exposed: "Relays control traffic for every peer, not only for this network.",
+    editor_private_mode: "Private mode",
+    editor_private_mode_help: "Refuses peers from other networks that don't know this network's secret.",
+    editor_private_mode_off: "Private mode is off: peers from other networks are accepted without the secret.",
+    editor_whitelist: "Relay only for listed networks",
+    editor_whitelist_help: "Without it this node relays for any network.",
+    editor_whitelist_field: "Network names",
+    editor_whitelist_field_help: "One network name per line. A * stands for any characters.",
+    editor_acl_unreadable: "This network's access control can't be edited here. The server's rules are kept as they \
+                            are when you save.",
     editor_encryption: "Encryption",
     editor_encryption_help: "Every peer in the network must use the same setting.",
     editor_encryption_weak: "XOR only scrambles traffic and Off sends it in the clear. Use them only for tests or \
@@ -785,7 +870,18 @@ pub(super) static EN: ConsoleStrings = ConsoleStrings {
     problem_peer: "“{line}” isn't a valid peer address.",
     problem_listener: "“{line}” isn't a valid listener address.",
     problem_proxy: "“{line}” isn't a valid subnet. Use a form like 192.168.1.0/24.",
+    problem_exit_node: "“{line}” isn't a valid exit node. Use a virtual IP like 10.144.144.2.",
     problem_socks5_port: "The SOCKS5 port must be a number from 1 to 65535.",
+    problem_mtu: "The MTU must be a number from 400 to 1500, or empty for the default.",
+    problem_dev_name: "The interface name is at most 15 characters: letters, digits, “-”, “_” and “.”.",
+    problem_recv_limit: "The receive limit must be a whole number of bytes per second above 0, or empty for no limit.",
+    problem_mapped_listener: "“{line}” isn't a valid mapped listener. Use a form like tcp://203.0.113.5:11010.",
+    problem_route: "“{line}” isn't a valid route. Use a subnet like 192.168.0.0/16.",
+    problem_whitelist: "“{line}” contains a space. Write one network name per line; * matches any characters.",
+    problem_vpn_cidr: "The VPN client subnet isn't valid. Use a form like 10.14.14.0/24.",
+    problem_vpn_port: "The VPN port must be a number from 1 to 65535.",
+    problem_forward: "“{line}” isn't a valid port forward. Use a form like tcp 127.0.0.1:8080 10.144.144.2:80.",
+    problem_acl: "The access control rules have an error. Fix it in the access control section, then save.",
     problem_nothing_to_import: "Paste a config first.",
     problem_no_random: "This browser can't generate a secret. Type one of at least 20 characters.",
 };
@@ -837,6 +933,7 @@ pub(super) static ZH_CN: ConsoleStrings = ConsoleStrings {
     err_machine_gone: "此设备已不再连接到服务器。",
     err_rejected: "服务器拒绝了请求：{message}",
     err_timeout: "服务器未在限定时间内响应。",
+    err_machine_no_answer: "设备没有响应服务器的请求。请检查该设备上的 EasyTier 是否正常运行、与服务器的连接是否稳定。",
     err_network: "无法连接到服务器：{message}",
     err_decode: "无法读取服务器的回复，它运行的 easytier-web 版本可能不同。",
     err_insecure: "只有本机可以使用明文 http://，请改用 https://。",
@@ -921,6 +1018,8 @@ pub(super) static ZH_CN: ConsoleStrings = ConsoleStrings {
     net_disabled: "已停用",
     net_error: "出错",
     net_read_only: "托管",
+    net_stale: "未能刷新 · {age} 秒前的数据",
+    net_stale_now: "未能刷新",
     net_enable: "启用",
     net_disable: "停用",
     net_peers: "对等节点",
@@ -979,7 +1078,7 @@ pub(super) static ZH_CN: ConsoleStrings = ConsoleStrings {
     editor_section_identity: "网络",
     editor_section_connect: "连接",
     editor_section_share: "共享",
-    editor_section_behavior: "行为",
+    editor_section_relay: "中继",
 
     editor_title_create: "在 {host} 上创建网络",
     editor_title_edit: "编辑网络",
@@ -1005,7 +1104,7 @@ pub(super) static ZH_CN: ConsoleStrings = ConsoleStrings {
     editor_listeners_help: "每行一个。留空则使用内核默认设置，会在所有网络接口上监听。",
     editor_listeners_exposed: "监听 0.0.0.0 或 :: 会接受来自此设备所连每个网络的连接。",
     editor_proxy: "共享的子网",
-    editor_proxy_help: "每行一个，例如 192.168.1.0/24。对等节点可以通过此节点访问这些子网。",
+    editor_proxy_help: "每行一个：192.168.1.0/24，或写成 192.168.1.0/24->10.50.0.0/24，让其他节点看到后一个子网。对等节点可以通过此节点访问这些子网。",
     editor_proxy_exposed: "此网络中的所有节点都能通过此节点访问这些子网。",
     editor_no_tun: "不创建 TUN 设备",
     editor_no_tun_help: "不创建虚拟网络接口，无需管理员权限，但设备上的应用无法使用该网络。",
@@ -1016,10 +1115,26 @@ pub(super) static ZH_CN: ConsoleStrings = ConsoleStrings {
     editor_socks5_help: "在本机打开一个通向该网络的代理。",
     editor_socks5_exposed: "任何能访问该端口的程序都能访问这个网络。",
     editor_socks5_port: "SOCKS5 端口",
-    editor_latency_first: "延迟优先",
-    editor_latency_first_help: "按延迟而不是跳数选择路由。",
-    editor_disable_p2p: "禁用直连",
-    editor_disable_p2p_help: "所有流量都经由中继。",
+    editor_mtu: "MTU",
+    editor_mtu_help: "400 到 1500 之间。留空使用核心的默认值。",
+    editor_dev_name: "网卡名称",
+    editor_dev_name_help: "TUN 网卡的名称，例如 et0。留空由系统决定。",
+    editor_exit_nodes: "使用的出口节点",
+    editor_exit_nodes_help: "每行填写一个出口节点的虚拟 IP。此节点的上网流量会经由它们发出。",
+    editor_forwards: "端口转发",
+    editor_forwards_exposed: "监听地址不是本机自身的转发，会对此设备所连的每个网络开放。",
+    editor_forwards_unreadable: "服务器上有此应用读不懂的端口转发。在你编辑此列表之前它们保持原样，编辑后会被丢弃。",
+    editor_relay_all_rpc: "为所有对等节点中继控制流量",
+    editor_relay_all_rpc_help: "同时转发其他网络中节点的控制消息。只有公网共享节点需要开启。",
+    editor_relay_all_rpc_exposed: "为所有对等节点中继控制流量，而不只是本网络。",
+    editor_private_mode: "私有模式",
+    editor_private_mode_help: "拒绝不知道本网络密钥的其他网络节点。",
+    editor_private_mode_off: "私有模式已关闭：其他网络的节点无需密钥即可接入。",
+    editor_whitelist: "只为列出的网络中继",
+    editor_whitelist_help: "关闭时，此节点为任何网络提供中继。",
+    editor_whitelist_field: "网络名称",
+    editor_whitelist_field_help: "每行填写一个网络名称，* 代表任意字符。",
+    editor_acl_unreadable: "此网络的访问控制无法在这里编辑。保存时服务器上的规则保持原样。",
     editor_encryption: "加密",
     editor_encryption_help: "网络中的所有对等节点必须使用相同的设置。",
     editor_encryption_weak: "XOR 只是混淆流量，关闭则以明文传输。仅用于测试或你已信任的链路。",
@@ -1046,7 +1161,18 @@ pub(super) static ZH_CN: ConsoleStrings = ConsoleStrings {
     problem_peer: "“{line}”不是有效的对等节点地址。",
     problem_listener: "“{line}”不是有效的监听地址。",
     problem_proxy: "“{line}”不是有效的子网，请使用 192.168.1.0/24 这样的格式。",
+    problem_exit_node: "“{line}”不是有效的出口节点，请使用 10.144.144.2 这样的虚拟 IP。",
     problem_socks5_port: "SOCKS5 端口必须是 1 到 65535 之间的数字。",
+    problem_mtu: "MTU 必须是 400 到 1500 之间的数字，留空则使用默认值。",
+    problem_dev_name: "网卡名称最多 15 个字符，只能包含字母、数字、“-”、“_”和“.”。",
+    problem_recv_limit: "接收速率限制必须是大于 0 的整数（字节/秒），留空则不限速。",
+    problem_mapped_listener: "“{line}”不是有效的映射监听地址，请使用 tcp://203.0.113.5:11010 这样的格式。",
+    problem_route: "“{line}”不是有效的路由网段，请使用 192.168.0.0/16 这样的格式。",
+    problem_whitelist: "“{line}”含有空格。每行填写一个网络名称，可使用 * 通配。",
+    problem_vpn_cidr: "VPN 客户端网段无效，请使用 10.14.14.0/24 这样的格式。",
+    problem_vpn_port: "VPN 端口必须是 1 到 65535 之间的数字。",
+    problem_forward: "“{line}”不是有效的端口转发，请使用 tcp 127.0.0.1:8080 10.144.144.2:80 这样的格式。",
+    problem_acl: "访问控制规则有错误，请在访问控制中修正后再保存。",
     problem_nothing_to_import: "请先粘贴配置。",
     problem_no_random: "浏览器无法生成密钥。请输入至少 20 个字符的密钥。",
 };

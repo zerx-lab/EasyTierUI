@@ -1,8 +1,9 @@
-//! Settings: the work mode, the UI's language, the EasyTier programs, and the app's version, as grouped panels with
-//! an icon each. The top row's panels sit side by side on a wide window and stack on a narrow one; the EasyTier panel
-//! spans the page.
+//! Settings: the work mode, the UI's language, the desktop app's own behavior (tray, login, quiet start), the
+//! EasyTier programs, and the app's version, as grouped panels with an icon each. The top row's panels sit side by
+//! side on a wide window and stack on a narrow one; the EasyTier panel spans the page.
 
 mod adopt;
+mod desktop;
 mod installed;
 mod programs;
 mod releases;
@@ -74,6 +75,16 @@ pub fn settings(store: Store) -> View {
                             Icon::Globe,
                             store.tr(|s| s.settings_language),
                             languages(store),
+                        )),
+                )
+                .child(
+                    view()
+                        .flex_1()
+                        .min_w(Points(PANEL_MIN_WIDTH))
+                        .child(section(
+                            Icon::Monitor,
+                            store.tr(|s| s.desktop.section),
+                            desktop::desktop(store),
                         )),
                 )
                 .child(

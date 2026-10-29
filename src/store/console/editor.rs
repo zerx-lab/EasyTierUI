@@ -7,9 +7,11 @@ use uuid::Uuid;
 
 use super::ConsoleStore;
 use crate::core::{
-    net::{ListenerUrl, PeerUrl, parse_ipv4_inet, parse_ipv4_subnet, parse_port},
-    remote::{Encryption, NetworkConfigForm, Networking, RemoteError, new_instance_id},
+    acl::{AclConfig, AclError},
+    net::{ListenerUrl, PeerUrl, parse_ip_addr, parse_ipv4_inet, parse_ipv4_subnet, parse_port},
+    remote::{AclState, Encryption, NetworkConfigForm, Networking, RemoteError, new_instance_id},
     secret::Secret,
+    settings::{DEFAULT_VPN_PORTAL_PORT, MappedListener, NodeFlags, PortForward, VpnPortal},
     target::TargetId,
 };
 
@@ -86,8 +88,30 @@ pub enum FormProblem {
     Listener(String),
     /// A proxied subnet (the line) is not valid.
     Proxy(String),
+    /// An exit node (the line) is not an IP address.
+    ExitNode(String),
     /// The SOCKS5 port is not a port.
     Socks5Port,
+    /// The MTU is not a number the core accepts (400 to 1500).
+    Mtu,
+    /// The interface name is too long or has characters an interface name cannot.
+    DevName,
+    /// The receive limit is not a positive number of bytes per second.
+    RecvLimit,
+    /// A mapped listener (the line) is not a valid address.
+    MappedListener(String),
+    /// A manual route (the line) is not a valid subnet.
+    Route(String),
+    /// A whitelist pattern (the line) has a space in it.
+    Whitelist(String),
+    /// The VPN portal's client subnet is not a valid subnet.
+    VpnCidr,
+    /// The VPN portal's port is not a port.
+    VpnPort,
+    /// A port forward (the line) is not `tcp|udp bind-address target-address`.
+    Forward(String),
+    /// The ACL has a problem; the ACL editor shows which.
+    Acl(AclError),
     /// There is no TOML to read.
     NothingToImport,
 }
@@ -168,12 +192,44 @@ pub struct EditorFields {
     pub no_tun: Signal<bool>,
     /// This node is an exit node.
     pub exit_node: Signal<bool>,
+    /// Exit nodes this node sends its traffic through (virtual IPs), one per line.
+    pub exit_nodes: Signal<String>,
     /// A SOCKS5 portal runs.
     pub socks5: Signal<bool>,
-    /// Routes are chosen by latency first.
-    pub latency_first: Signal<bool>,
-    /// Direct links are off.
-    pub disable_p2p: Signal<bool>,
+    /// The behavior switches (latency first, disable P2P, KCP, hole punching, ...).
+    pub flags: Signal<NodeFlags>,
+    /// This node relays RPC for every peer.
+    pub relay_all_rpc: Signal<bool>,
+    /// Only peers that know the network secret may connect.
+    pub private_mode: Signal<bool>,
+    /// The MTU as typed; empty for the core's default.
+    pub mtu: Signal<String>,
+    /// The TUN interface name; empty lets the system choose.
+    pub dev_name: Signal<String>,
+    /// The limit on received traffic in bytes per second, as typed; empty for none.
+    pub recv_limit: Signal<String>,
+    /// Public addresses of the listeners (mapped listeners), one per line.
+    pub mapped_listeners: Signal<String>,
+    /// Manual routes replace the discovered ones.
+    pub routes_on: Signal<bool>,
+    /// The manual routes (CIDRs), one per line.
+    pub routes: Signal<String>,
+    /// Only the listed networks are relayed for.
+    pub whitelist_on: Signal<bool>,
+    /// The relay network whitelist, one pattern per line.
+    pub whitelist: Signal<String>,
+    /// The WireGuard VPN portal runs.
+    pub vpn_on: Signal<bool>,
+    /// The addresses handed to WireGuard clients (`10.14.14.0/24`).
+    pub vpn_cidr: Signal<String>,
+    /// The VPN portal's UDP port as typed.
+    pub vpn_port: Signal<String>,
+    /// Port forwards, one per line: `tcp 127.0.0.1:8080 10.144.144.2:80`.
+    pub forwards: Signal<String>,
+    /// The ACL; `None` for no ACL. Holds group secrets: wiped with the form.
+    pub acl: Signal<Option<AclConfig>>,
+    /// The server's ACL cannot be read by this app: it is kept as it is on save and `acl` is ignored.
+    pub acl_unreadable: Signal<bool>,
     /// How peers are found.
     pub networking: Signal<NetworkingChoice>,
     /// The encryption, as one of [`ENCRYPTION_IDS`] (or an algorithm name a newer server uses).
@@ -198,9 +254,25 @@ impl EditorFields {
             dhcp: signal(true),
             no_tun: signal(false),
             exit_node: signal(false),
+            exit_nodes: signal(String::new()),
             socks5: signal(false),
-            latency_first: signal(false),
-            disable_p2p: signal(false),
+            flags: signal(NodeFlags::default()),
+            relay_all_rpc: signal(false),
+            private_mode: signal(true),
+            mtu: signal(String::new()),
+            dev_name: signal(String::new()),
+            recv_limit: signal(String::new()),
+            mapped_listeners: signal(String::new()),
+            routes_on: signal(false),
+            routes: signal(String::new()),
+            whitelist_on: signal(false),
+            whitelist: signal(String::new()),
+            vpn_on: signal(false),
+            vpn_cidr: signal(String::new()),
+            vpn_port: signal(default_vpn_port()),
+            forwards: signal(String::new()),
+            acl: signal(None),
+            acl_unreadable: signal(false),
             networking: signal(NetworkingChoice::Manual),
             encryption: signal("aes-gcm".to_owned()),
             base: stored(None),
@@ -223,9 +295,25 @@ impl EditorFields {
             self.dhcp.set(true);
             self.no_tun.set(false);
             self.exit_node.set(false);
+            self.exit_nodes.set(String::new());
             self.socks5.set(false);
-            self.latency_first.set(false);
-            self.disable_p2p.set(false);
+            self.flags.set(NodeFlags::default());
+            self.relay_all_rpc.set(false);
+            self.private_mode.set(true);
+            self.mtu.set(String::new());
+            self.dev_name.set(String::new());
+            self.recv_limit.set(String::new());
+            self.mapped_listeners.set(String::new());
+            self.routes_on.set(false);
+            self.routes.set(String::new());
+            self.whitelist_on.set(false);
+            self.whitelist.set(String::new());
+            self.vpn_on.set(false);
+            self.vpn_cidr.set(String::new());
+            self.vpn_port.set(default_vpn_port());
+            self.forwards.set(String::new());
+            self.acl.set(None);
+            self.acl_unreadable.set(false);
             self.networking.set(NetworkingChoice::Manual);
             self.encryption.set("aes-gcm".to_owned());
             self.base.replace(None);
@@ -263,14 +351,63 @@ impl EditorFields {
             self.proxy_cidrs.set(form.proxy_cidrs.join("\n"));
             self.no_tun.set(form.no_tun);
             self.exit_node.set(form.enable_exit_node);
+            self.exit_nodes.set(form.exit_nodes.join("\n"));
             self.socks5.set(form.socks5_port.is_some());
             self.socks5_port.set(
                 form.socks5_port
                     .map(|port| port.to_string())
                     .unwrap_or_default(),
             );
-            self.latency_first.set(form.latency_first);
-            self.disable_p2p.set(form.disable_p2p);
+            self.flags.set(form.flags);
+            self.relay_all_rpc.set(form.relay_all_peer_rpc);
+            self.private_mode.set(form.private_mode);
+            self.mtu
+                .set(form.mtu.map(|mtu| mtu.to_string()).unwrap_or_default());
+            self.dev_name.set(form.dev_name.clone().unwrap_or_default());
+            self.recv_limit.set(
+                form.instance_recv_bps_limit
+                    .map(|limit| limit.to_string())
+                    .unwrap_or_default(),
+            );
+            self.mapped_listeners.set(form.mapped_listeners.join("\n"));
+            self.routes_on.set(form.manual_routes.is_some());
+            self.routes
+                .set(form.manual_routes.clone().unwrap_or_default().join("\n"));
+            self.whitelist_on.set(form.relay_whitelist.is_some());
+            self.whitelist
+                .set(form.relay_whitelist.clone().unwrap_or_default().join("\n"));
+            self.vpn_on.set(form.vpn_portal.is_some());
+            match form.vpn_portal {
+                Some(portal) => {
+                    self.vpn_cidr.set(portal.client_cidr.to_string());
+                    self.vpn_port.set(portal.listen_port.to_string());
+                }
+                None => {
+                    self.vpn_cidr.set(String::new());
+                    self.vpn_port.set(DEFAULT_VPN_PORTAL_PORT.to_string());
+                }
+            }
+            self.forwards.set(
+                form.port_forwards
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
+            match &form.acl {
+                AclState::Off => {
+                    self.acl.set(None);
+                    self.acl_unreadable.set(false);
+                }
+                AclState::On(config) => {
+                    self.acl.set(Some(config.clone()));
+                    self.acl_unreadable.set(false);
+                }
+                AclState::Unreadable => {
+                    self.acl.set(None);
+                    self.acl_unreadable.set(true);
+                }
+            }
             self.encryption.set(match &form.encryption {
                 Encryption::CoreDefault => "default".to_owned(),
                 Encryption::Algorithm(name) => name.clone(),
@@ -280,11 +417,13 @@ impl EditorFields {
         });
     }
 
-    /// Wipes the secret and the imported text.
+    /// Wipes the secrets (the network's and the ACL's groups) and the imported text.
     fn wipe(&self) {
         batch(|| {
             self.secret.set(String::new());
             self.toml.set(String::new());
+            self.acl.set(None);
+            self.acl_unreadable.set(false);
             self.base.replace(None);
         });
     }
@@ -314,6 +453,24 @@ fn proxy_line(line: &str) -> Option<String> {
     }
 }
 
+/// The valid MTU values of the editor: the official GUI's lower bound up to Ethernet's.
+const MTU_RANGE: std::ops::RangeInclusive<u16> = 400..=1500;
+/// The longest TUN interface name (the Linux limit).
+const MAX_DEV_NAME_CHARS: usize = 15;
+
+/// Whether `name` is usable as an interface name: short, and letters, digits, `-`, `_` and `.` only.
+fn dev_name_ok(name: &str) -> bool {
+    name.chars().count() <= MAX_DEV_NAME_CHARS
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// The VPN portal's default port as the field's text.
+fn default_vpn_port() -> String {
+    DEFAULT_VPN_PORTAL_PORT.to_string()
+}
+
 impl ConsoleStore {
     /// Whether this device can generate a secret (a browser has no source of randomness).
     pub fn can_generate_secret(&self) -> bool {
@@ -325,6 +482,28 @@ impl ConsoleStore {
         lines(&self.fields.listeners.get()).iter().any(|line| {
             ListenerUrl::parse_config("listeners", line)
                 .is_ok_and(|url| url.exposes_all_interfaces())
+        })
+    }
+
+    /// Whether the editor turns the WireGuard VPN portal on, which listens on every interface (shown as an
+    /// exposure).
+    pub fn vpn_portal_on(&self) -> bool {
+        self.fields.vpn_on.get()
+    }
+
+    /// Whether a port forward of the editor listens beyond this machine (shown as an exposure).
+    pub fn forwards_public(&self) -> bool {
+        lines(&self.fields.forwards.get()).iter().any(|line| {
+            PortForward::parse_line("forward", line).is_ok_and(|forward| forward.is_public())
+        })
+    }
+
+    /// Whether the server's port forwards include rows this app cannot read, which stay as they are until the
+    /// forward list is edited.
+    pub fn forwards_unreadable(&self) -> bool {
+        self.fields.base.with(|base| {
+            base.as_ref()
+                .is_some_and(NetworkConfigForm::forwards_unreadable)
         })
     }
 
@@ -582,6 +761,13 @@ impl ConsoleStore {
         form.proxy_cidrs = proxies;
         form.no_tun = fields.no_tun.get_untracked();
         form.enable_exit_node = fields.exit_node.get_untracked();
+        let mut exit_nodes = Vec::new();
+        for line in lines(&fields.exit_nodes.get_untracked()) {
+            let address = parse_ip_addr("exit node", &line)
+                .map_err(|_| FormProblem::ExitNode(line.clone()))?;
+            exit_nodes.push(address.to_string());
+        }
+        form.exit_nodes = exit_nodes;
         form.socks5_port = if fields.socks5.get_untracked() {
             Some(
                 parse_port("SOCKS5 port", &fields.socks5_port.get_untracked())
@@ -590,8 +776,97 @@ impl ConsoleStore {
         } else {
             None
         };
-        form.latency_first = fields.latency_first.get_untracked();
-        form.disable_p2p = fields.disable_p2p.get_untracked();
+        form.flags = fields.flags.get_untracked();
+        form.relay_all_peer_rpc = fields.relay_all_rpc.get_untracked();
+        form.private_mode = fields.private_mode.get_untracked();
+        let mtu = fields.mtu.get_untracked();
+        form.mtu = match mtu.trim() {
+            "" => None,
+            text => Some(
+                text.parse::<u16>()
+                    .ok()
+                    .filter(|mtu| MTU_RANGE.contains(mtu))
+                    .ok_or(FormProblem::Mtu)?,
+            ),
+        };
+        let dev_name = fields.dev_name.get_untracked().trim().to_owned();
+        if !dev_name.is_empty() && !dev_name_ok(&dev_name) {
+            return Err(FormProblem::DevName);
+        }
+        form.dev_name = (!dev_name.is_empty()).then_some(dev_name);
+        let limit = fields.recv_limit.get_untracked();
+        form.instance_recv_bps_limit = match limit.trim() {
+            "" => None,
+            text => Some(
+                text.parse::<u64>()
+                    .ok()
+                    .filter(|limit| *limit >= 1)
+                    .ok_or(FormProblem::RecvLimit)?,
+            ),
+        };
+        let mut mapped = Vec::new();
+        for line in lines(&fields.mapped_listeners.get_untracked()) {
+            let url = MappedListener::parse("mapped listener", &line)
+                .map_err(|_| FormProblem::MappedListener(line.clone()))?;
+            mapped.push(url.as_str().to_owned());
+        }
+        form.mapped_listeners = mapped;
+        form.manual_routes = if fields.routes_on.get_untracked() {
+            let mut routes = Vec::new();
+            for line in lines(&fields.routes.get_untracked()) {
+                let net = parse_ipv4_subnet("route", &line)
+                    .map_err(|_| FormProblem::Route(line.clone()))?;
+                routes.push(net.to_string());
+            }
+            Some(routes)
+        } else {
+            None
+        };
+        form.relay_whitelist = if fields.whitelist_on.get_untracked() {
+            let patterns = lines(&fields.whitelist.get_untracked());
+            // EasyTier stores the list space-separated: a space would split one pattern into two.
+            if let Some(bad) = patterns
+                .iter()
+                .find(|pattern| pattern.chars().any(char::is_whitespace))
+            {
+                return Err(FormProblem::Whitelist(bad.clone()));
+            }
+            Some(patterns)
+        } else {
+            None
+        };
+        form.vpn_portal = if fields.vpn_on.get_untracked() {
+            let client_cidr =
+                parse_ipv4_subnet("VPN client subnet", &fields.vpn_cidr.get_untracked())
+                    .map_err(|_| FormProblem::VpnCidr)?;
+            let listen_port = parse_port("VPN port", &fields.vpn_port.get_untracked())
+                .map_err(|_| FormProblem::VpnPort)?;
+            Some(VpnPortal {
+                client_cidr,
+                listen_port,
+            })
+        } else {
+            None
+        };
+        let mut forwards = Vec::new();
+        for line in lines(&fields.forwards.get_untracked()) {
+            forwards.push(
+                PortForward::parse_line("forward", &line)
+                    .map_err(|_| FormProblem::Forward(line.clone()))?,
+            );
+        }
+        form.port_forwards = forwards;
+        form.acl = if fields.acl_unreadable.get_untracked() {
+            AclState::Unreadable
+        } else {
+            match fields.acl.get_untracked() {
+                Some(config) => {
+                    config.check().map_err(FormProblem::Acl)?;
+                    AclState::On(config)
+                }
+                None => AclState::Off,
+            }
+        };
         form.encryption = match fields.encryption.get_untracked().as_str() {
             "default" => Encryption::CoreDefault,
             "off" => Encryption::Disabled,
