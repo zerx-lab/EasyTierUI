@@ -71,16 +71,21 @@ EasyTier reports; and the user can upgrade EasyTier without waiting for an app r
 
 - Node: profiles (create, join, import from TOML / link / QR, export, edit, delete), one running instance per profile;
   managed instances (enroll with a config-server URL, leave management); live node info, virtual IP, peers with route
-  type, latency, loss and traffic; logs (redacted).
-- Console: several easytier-web servers; machines, networks, configs, credentials, device blocking.
+  type, latency, loss and traffic; logs (redacted). On the desktops a TUN network runs as an OS service installed with
+  the user's consent (decided); on phones the in-app node runs without TUN until a VPN service host exists.
+- Console: several easytier-web servers; machines, networks, configs, credentials (per network, through the machine's
+  RPC proxy). easytier-web 2.6.4 has no device-blocking endpoint: disabling or deleting a machine's network is the
+  control it offers.
 - Control-plane host: start / stop / upgrade easytier-web on a desktop with first-run hardening (replace default
   passwords, loopback API, registration off); generate server deployment artifacts (Docker Compose, systemd, reverse
   proxy) with the same defaults.
 - EasyTier management on the desktops: detect, download and verify, install side by side, switch, roll back.
 - Languages: zh-CN and en (agent default during setup; confirm).
-- Open decisions: an iOS packet tunnel; tray / menu-bar presence and autostart; running the desktop core as an OS
-  service by default or on demand; whether the app applies artifacts to a server itself (SSH) or only generates them;
-  distribution channels and signing; the app's relationship to the EasyTier project.
+- Decided: mobile embeds EasyTier's library through a UniFFI bridge crate; desktop TUN runs as an OS service.
+- Open decisions: an iOS packet tunnel and an Android VpnService host (NSH 0.3 packaging cannot declare either);
+  tray / menu-bar presence and autostart (services are installed with autostart off); whether the app applies
+  artifacts to a server itself (SSH) or only generates them; distribution channels and signing; the app's relationship
+  to the EasyTier project; the LGPL-3.0 review of shipping EasyTier's library statically linked on mobile.
 
 ## Brand Commitments
 

@@ -1,13 +1,36 @@
+<img src="brand/logo.svg" width="96" height="96" alt="EasyTierUI">
+
 # EasyTierUI
 
-An app written in Rust: its UI is `src/lib.rs`, and `nsh.json` names the root component (`"root": "App"`).
+A client for [EasyTier](https://github.com/EasyTier/EasyTier) on macOS, Windows, Linux, iOS, Android and the web, written
+in Rust on Native Shell: its UI is `src/lib.rs`, and `nsh.json` names the root component (`"root": "App"`).
+
+What it does, by role (the same pages on every platform; where a platform cannot do something locally, the page says so
+and offers the remote alternative):
+
+- **Node** — this device in a mesh: create / join / import (TOML, share link, QR image) / export / edit / delete
+  network profiles; start and stop them; node info, peers (direct or relayed, latency, loss, traffic), redacted logs;
+  enroll in a control plane. Desktops run the official `easytier-core` (a TUN network as an OS service after an
+  administrator prompt, a no-TUN network as the app's child); iOS / Android run EasyTier's library in process without
+  TUN (`crates/easytier-mobile`, UniFFI).
+- **Console** — several easytier-web servers: sign in, machines, their networks (create, edit, enable / disable,
+  delete, peers), networks across machines, credentials.
+- **Control-plane host** — run easytier-web on a desktop with first-run hardening (default passwords replaced, API on
+  loopback, registration off); render server deployment files (Docker Compose or systemd, Caddy or nginx, firewall,
+  README) on any platform.
+- **EasyTier releases** (desktops) — list GitHub releases, download, verify the sha256 digest, install side by side,
+  switch, roll back, or use a directory you installed yourself after confirming its version.
+
+Prerequisites beyond NSH's: `protoc` on `PATH` for the iOS / Android builds (EasyTier's library compiles protobufs),
+and for Android the NDK that NSH uses.
 
 ```sh
 nsh run                      # this machine's backend; --target ios, android, web, macos, linux or windows
 nsh check                    # cargo check of the crate, then type checks App.test.tsx
 nsh test                     # cargo test, then App.test.tsx: the root tested from TypeScript, headless; --target to run it on a platform
 nsh test nsh.json --trace    # headless: what the root mounts, and the time of each commit
-nsh package --target web     # or ios, android, macos, linux, windows
+nsh package --target web     # or android, macos, linux, windows; the icon is nsh.json's "icon" (brand/icon.png)
+nsh package --target ios --icon brand/icon-ios.png   # iOS needs the opaque full-bleed icon
 ```
 
 `nsh run` and `nsh package` mount the root on every platform, the browser included, without QuickJS: the app is Rust

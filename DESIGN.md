@@ -88,6 +88,12 @@ typography:
     fontWeight: 500
     lineHeight: "32px"
     fontFeature: "tnum"
+  figure:
+    fontFamily: "ui-monospace, monospace"
+    fontSize: "20px"
+    fontWeight: 500
+    lineHeight: "28px"
+    fontFeature: "tnum"
 rounded:
   control: "6px"
   container: "8px"
@@ -199,13 +205,77 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.container}"
     padding: "12px 16px"
+  toolbar:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink}"
+    typography: "{typography.body}"
+    padding: "8px 24px"
+    height: "48px"
+  search-field:
+    backgroundColor: "{colors.paper-panel}"
+    textColor: "{colors.ink}"
+    typography: "{typography.body}"
+    rounded: "{rounded.control}"
+    padding: "6px 32px"
+    height: "32px"
+    width: "260px"
+  summary-strip:
+    backgroundColor: "{colors.paper-panel}"
+    textColor: "{colors.ink}"
+    typography: "{typography.figure}"
+    rounded: "{rounded.container}"
+    padding: "12px 16px"
+  data-table-header:
+    backgroundColor: "{colors.paper-well}"
+    textColor: "{colors.pencil}"
+    typography: "{typography.label}"
+    padding: "0 16px"
+    height: "36px"
+  data-table-row:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink}"
+    typography: "{typography.body}"
+    padding: "4px 16px"
+    height: "40px"
+  data-table-row-touch:
+    height: "44px"
+  data-table-row-hover:
+    backgroundColor: "{colors.paper-hover}"
+  drawer:
+    backgroundColor: "{colors.paper-panel}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.container}"
+    padding: "24px"
+    width: "760px"
+  icon-button:
+    backgroundColor: "transparent"
+    textColor: "{colors.pencil}"
+    rounded: "{rounded.control}"
+    size: "32px"
+  icon-button-touch:
+    size: "44px"
+  kind-chip:
+    backgroundColor: "{colors.paper-well}"
+    textColor: "{colors.pencil}"
+    typography: "{typography.label}"
+    rounded: "{rounded.pill}"
+    padding: "0 8px"
+    height: "20px"
+  threshold-bar:
+    backgroundColor: "{colors.paper-well}"
+    rounded: "{rounded.pill}"
+    height: "4px"
+    width: "64px"
 ---
 
 # Design System: EasyTierUI
 
-Status: **seed**. The project has no screens yet; these values are the direction the first screens implement. Once they
-ship, re-run `$impeccable document` in scan mode and let the code correct this file. `theme.json` implements the color
-and radius tokens below; the two always change together.
+Status: **redesign in progress**. Every role's pages are built from these values and the components in
+`src/components/`: the icon set, toolbar, search field, summary strip, data table, drawer, key-value grid, charts,
+threshold bar, icon buttons and menus, fields, secret field, switch rows with exposure warnings, select, dialogs,
+callouts, chips, cards, code blocks, QR view, busy buttons, age text. Nobody has looked at them on a screen yet: re-run
+`$impeccable document` in scan mode after the first visual review and let the code correct this file. `theme.json`
+implements the color and radius tokens below; the two always change together.
 
 ## Overview
 
@@ -318,7 +388,8 @@ Sizes are points and grow with the user's text size; Rust uses NSH's presets (`.
 - **Meta** (400, 12/16): timestamps ("updated 3 s ago"), helper text, versions in footers.
 - **Mono** (400, 13/20, tabular): virtual IPs, CIDRs, peer URLs, peer and instance ids, versions, latency, loss, byte
   counts, config snippets, logs.
-- **Stat** (mono 500, 24/32, tabular): the one headline number of a network card (peers online, latency).
+- **Stat** (mono 500, 24/32, tabular): a headline number (peers online, latency) where a panel has room for one.
+- **Figure** (mono 500, 20/28, tabular): the value of a Summary Strip cell, with a muted unit in Body beside it.
 
 ### Named Rules
 **The Machine Voice Rule.** What the core or the network produced (`10.144.144.2/24`, `tcp://1.2.3.4:11010`,
@@ -361,6 +432,18 @@ page gutter, 24 (`_6`) between sections, 32 (`_8`) around empty states.
 - **Text size:** frames grow with their labels (`min_h` plus padding, never a fixed height around text); rows wrap or
   stack when text gets large; layouts leave room for the longer of English and Chinese.
 
+### Page anatomy
+Under the title bar's row every page starts with a **toolbar**: the page's context on the left, its actions on the
+right, a hairline below. Pages may also put their primary actions in the title-bar row itself, at its trailing edge
+(`pages::header_actions`), which the shell renders on wide layouts and in the compact header. Under the toolbar the
+page body has 24 pt gutters and 24 pt between sections. Order within a page: toolbar, summary strip, charts, data
+table; the detail of a row opens in a drawer, not on another page.
+
+### Density
+SigNoz-grade density, kept legible: 12 pt Label and Meta type for captions, 13 pt Mono for figures, 40 pt rows, 36 pt
+headers and a 36 pt toolbar control row. Touch screens keep 44 pt targets and 16 pt body type. Panels and tables
+separate by hairlines and layer steps, never by shadows or nested cards.
+
 ## Elevation & Depth
 
 Depth is tone, not light. The floor, panel and well layers step in brightness and are outlined by 1 pt hairlines;
@@ -370,7 +453,8 @@ Mobile sheets and alerts are the platform's own.
 
 ### Shadow Vocabulary
 - **Popup lift** (`.shadow_md()`): popovers, menus, tooltips, select lists.
-- **Dialog lift** (`.shadow_lg()`): desktop and web dialogs over a scrim of `foreground` at 40 %.
+- **Dialog lift** (`.shadow_lg()`): desktop and web dialogs over a scrim of `foreground` at 40 %, and the Drawer over a
+  backdrop of `foreground` at 24 %.
 
 ### Named Rules
 **The Flat Resting State Rule.** A surface that stays on screen never casts a shadow; it separates by one layer step and
@@ -414,16 +498,18 @@ the hollow ring with a slow opacity pulse that stops under Reduce Motion. The la
   Relay), NAT type, protocol.
 - **Neutral chip:** well fill, `muted-foreground` label: tags, versions, counts. Most chips are neutral.
 
-### Network Card (signature)
-The home of one network: Title (network name) with the Status Lamp on the first line; the node's virtual IP in Mono
-with a copy button; a Stat (peers online) and a Meta line (core version, last update); the primary action (Start / Stop)
-at the trailing edge. Panel fill, container radius, 16 pt padding, hairline border, no shadow.
+### Network Row (signature)
+The home of one network is a row of the Data Table (above), not a card: its name over the EasyTier network name, the
+Status Lamp with its word, the virtual IP in Mono without its prefix, the peers online with direct / relayed bars,
+the received and sent rates with their sparklines (only from real samples), a neutral chip for how it runs (TUN / No
+TUN / Managed), and at the trailing edge Start / Stop and a more menu (Settings, Logs, Export, Delete). The whole row
+opens the Network drawer; a failed network says why in a full-width line under its row, with the action that fixes it.
 
 ### Peer Row (signature)
-Hostname in Body; virtual IP, latency, loss and traffic in Mono with tabular figures, right-aligned in columns on the
-desktops and stacked under the hostname on phones; a Status Chip for P2P / Relay. Rows are 44 pt (36 pt in compact
-admin tables), separated by hairlines, `accent` on hover and selection. Latency turns amber only past a threshold, with
-the number still readable.
+A peer is a row of the Data Table (above): hostname in Body; virtual IP, latency, loss and traffic in Mono with
+tabular figures, right-aligned and never wrapping; a Status Chip for P2P / Relay; latency and loss as Threshold
+Bars. Rows are 40 pt (44 pt on touch), separated by hairlines, `accent` on hover, `primary-muted` when selected, and
+open the Peer drawer. On phones the figures stack in a wrapping line under the hostname.
 
 ### Inputs / Fields
 - **Style:** panel fill, 1 pt `input` edge, control radius, 32 pt (44 pt touch), visible label above, helper or error
@@ -452,13 +538,131 @@ the remote alternative as a button ("Manage this server's node", "Deploy a contr
 without a way forward, never a feature silently missing.
 
 ### Dialogs and Sheets
-Desktop and web dialogs: panel fill, container radius, 24 pt padding, 480 pt wide (640 for config editors), Dialog lift.
-Phones: the platform's sheet and `AlertDialog`. Confirmations name the object and the consequence ("Delete profile
-“home”? Its config and saved secret are removed from this device.").
+Confirmations are the platform's own alert on every platform. A short or multi-step task that needs protected focus
+(create, join, import, enroll, add server) stays a centered dialog on the desktops and the web: panel fill, container
+radius, 24 pt padding, 480 pt wide (640 for config editors), Dialog lift; its body scrolls inside the panel with room
+for focus rings, and on phones it is a full-height page sheet. Anything that is an entity's detail or editing is a
+Drawer (above). Confirmations name the object and the consequence ("Delete profile “home”? Its config and saved
+secret are removed from this device.").
 
 ### Callouts
 10 % tint of the hue (`primary-muted`, `warning-muted`, `destructive-muted`), container radius, 12×16 pt padding, a hue
 icon and `foreground` text. For exposure warnings (exit node, subnet proxy, encryption off), core problems and tips.
+
+### Icons
+One authored set, drawn natively (`src/components/icon.rs`): SVG path data on a 24-unit grid, stroked on a canvas with
+round caps and joins at 1.5 pt whatever the size, 16 pt in buttons, rows and menus, 14 pt in dense table cells and
+32 pt in empty states. The tint is a theme token read in the canvas's binding, so a change of appearance redraws it:
+`muted-foreground` at rest, `foreground` under the pointer, `primary` for a selected toggle, a lamp hue only for state.
+The set: network, peers, server, key, activity, shield, rocket, settings, plus, import, export, download, link, play,
+stop, restart, refresh, more, copy, check, close, search, chevron-down, chevron-right, info, alert-triangle,
+alert-circle, external, terminal, qr, eye, eye-off, trash, edit, globe, lock, arrow-down (received), arrow-up (sent),
+filter. An icon is decoration: the control that holds it has the accessible name.
+
+**The Drawn Icon Rule.** Icons are drawn, never typed. A glyph (`i`, `!`, a triangle or tick character, an emoji) is a
+font-dependent stand-in; a missing icon is added to the set with the same stroke, not approximated with text.
+
+### Toolbar and Search Field
+The row under the page title: context on the left (search, segmented filters, group-by), a flexible spacer, the page's
+actions on the right with the primary one last, and a hairline below. It spans the page edge to edge (it cancels the
+24 pt page gutter) and wraps on narrow windows. The search field is a 32 pt input (44 pt touch) with a search icon at
+its leading edge, a clear button while it holds text, and the usual focus ring; it filters as you type.
+
+### Summary Strip
+One panel of 3-5 cells divided by hairlines, never separate cards. A cell is a Label over a value in Figure type
+(mono 20/28, tabular) with a muted unit, an optional Meta caption and optional status-count bars: a 3 x 14 pt bar in
+the lamp hue, a tabular count and its word ("2 direct", "0 relayed"). The strip states only what the core reported: a
+cell with no data is left out, never shown as zero. Cells share the width and wrap to a second row when narrow.
+
+### Data Table (signature)
+A panel (panel fill, hairline, container radius, clipped to its corners) with a 36 pt header row on the well fill in
+Label type and 40 pt rows (44 pt on touch) separated by hairlines. A row has no zebra and no resting fill; `accent`
+shows under the pointer and `primary-muted` marks the selected row; the whole row is one button that opens the
+drawer. Columns have fixed widths, except one flexible text column. A cell is one line, cut with an ellipsis; numbers,
+addresses, versions and rates are Mono with tabular figures and right-aligned, in a column headed right-aligned; a
+missing value is a muted dash. A column whose meaning needs saying (thresholds, units) gets an info icon with a
+tooltip in its header. Columns that do not fit a narrow window can be hidden below a width. On phones and narrow
+windows rows stack: the first cell is the title and the other cells follow in a wrapping line of facts, each still one
+line, with the action cells at the row's end. A failed row shows its reason and its action under the row. An empty
+table keeps its header and shows an empty state inside the panel.
+
+**The No-Wrap Number Rule.** A number, address, version or id is never allowed to wrap. Give its column the width of
+its longest value, set it in Mono with `number_of_lines(1)`, and let a text that still does not fit end in an ellipsis.
+A cell that breaks `10.126.126.2/24` into two lines is a bug in the column, not in the data.
+
+### Drawer (signature)
+The place for an entity's detail and editing: a network's, a machine's, a peer's, a server network's, a credential's.
+On the desktops and the web a right-side sheet `min(760 pt, 72 %)` of the window wide (the whole window below 640 pt),
+panel fill, a hairline on its leading edge, the Dialog lift and a backdrop of `foreground` at 24 %; on phones a
+full-height page sheet whose close is back. Anatomy, top to bottom: a header (the entity's name in Title, a neutral
+kind chip such as "Network", the status lamp with its word, the header's own actions such as Start / Stop, a close
+icon button; a hairline below), an optional key-value grid, optional segmented tabs, a scrolling body padded 24 pt on
+every side, and a sticky footer of actions under a hairline. Escape, the backdrop and the close button close it.
+
+**The Drawer Rule.** Detail and editing of an entity that lives in a list open in a drawer, not in a centered modal.
+Modals stay for what interrupts or needs protected focus: short confirmations (the platform's alert) and multi-step
+creation flows (create, join, import, enroll, add server). The body is padded 24 pt on every side, inside the scroll
+view, so a 2 pt focus ring offset by 2 pt is never clipped at the scroll edge; the same padding applies inside modals.
+
+### Key-Value Grid
+Facts as a Label over a value, in columns of at least 180 pt that fit the width and a row gap of 16 pt, so a drawer
+never shows a near-empty second row. Machine data is Mono, one line, selectable, optionally with a copy button; a
+missing value is a muted dash.
+
+### Charts
+`metric_chart` and `sparkline` draw in-memory samples (about three minutes) with NSH's plot: area and line series, a
+hairline grid (`border` at low opacity) at the top, middle and bottom of the y axis, a y axis of Mono labels in Meta
+size and `muted-foreground`, formatted with the unit (B/s, KiB/s, MiB/s, GiB/s; ms, s; %), and no legend box: a row of
+8 pt swatches and words above the plot. Received is `chart-1`, sent `chart-2`, further series `chart-3` ... `chart-5`;
+a peer's color is hashed from its id over that red-free palette, so it is the same in every chart. Before two samples
+the chart says it is collecting them. A sparkline is 64 x 20 pt, a line only, and sits in a table cell.
+
+**The Real Samples Rule.** A chart or sparkline shows only samples the core reported. No samples, no line: the empty
+state says so. Never a decorative trend, a smoothed guess or a placeholder curve.
+
+### Threshold Bar
+A 4 pt bar (at least 64 pt wide) beside its number for latency and loss: `success` below the first threshold,
+`warning` at or above it, `destructive` only for loss over 10 % or an unreachable peer. The number stays Mono and
+readable; the color only repeats it. The column header's tooltip states the thresholds.
+
+### Icon Button and More Menu
+A ghost button holding one icon: 32 pt on the desktops, 44 pt on touch, the control radius, `accent` on hover and
+press. It is named for screen readers and, with a pointer, by a tooltip. The more menu is an icon button that opens a
+menu of labelled actions, each with its icon; a destructive action is drawn in `destructive` and asks its own
+confirmation naming the object.
+
+### Live Indicator
+An 8 pt `success` dot with a slow pulse (stopped under Reduce Motion) while the page polls a running instance, beside
+"Updated 3 s ago". Not polling, it is a hollow `muted-foreground` ring. Never alone: the words carry the meaning.
+
+### Empty States
+Inside the table or panel area: a 32 pt icon, a Title, one sentence and the primary action. No illustrations.
+
+## Logo and App Icon
+
+**The mark: "Lit Mesh".** Four nodes in a diamond, every pair linked (a full mesh: no node is the center), and one
+node lit in Cobalt: the network, and the one lamp that tells you it is up. It is the app's own mark, not EasyTier's
+logo (PRODUCT.md, Brand Commitments). Sources live in `brand/`; the PNGs are rendered from the SVGs, never edited.
+
+| File | What | Used by |
+|---|---|---|
+| `brand/logo.svg` | The mark alone, transparent; Ink / Cobalt Line, Readout / Cobalt Glow under `prefers-color-scheme: dark` | README, documentation, a future in-app mark |
+| `brand/icon.svg` → `brand/icon.png` | 824 pt Night Panel tile (radius 185) with a Night Rule hairline, centered in a transparent 1024 canvas; mark in Readout with a Cobalt Glow lamp | `nsh.json` `"icon"`: macOS (`.icns`), Windows (`.exe`), Linux (`.desktop`), Android launcher, web favicon / manifest / touch icon |
+| `brand/icon-ios.svg` → `brand/icon-ios.png` | Full-bleed opaque Night Panel square, larger mark; iOS masks the corners itself and rejects alpha | `nsh package --target ios… --icon brand/icon-ios.png` |
+
+Render after changing an SVG (resvg 0.48):
+
+```sh
+resvg -w 1024 -h 1024 brand/icon.svg brand/icon.png
+resvg -w 1024 -h 1024 brand/icon-ios.svg brand/icon-ios.png
+magick brand/icon-ios.png -background '#14161b' -alpha remove -alpha off PNG24:brand/icon-ios.png
+```
+
+**The Lit Lamp Rule.** The mark has exactly one lit node, in Cobalt; the other nodes and the links are the ink of the
+appearance. The icon tile is dark in both appearances (it sits on docks, launchers and tabs, not on the app's floor).
+The mark's Cobalt is the brand's, outside the chrome, so it does not count against the One Signal Rule. Keep the mark
+at 16 pt or larger, with clear space of a quarter of its width; don't recolor the lamp to a state hue, add a second lit
+node, outline it or set it on a photograph.
 
 ## Do's and Don'ts
 
@@ -471,6 +675,9 @@ icon and `foreground` text. For exposure warnings (exit node, subnet proxy, encr
 - **Do** keep touch targets at least 44 × 44 pt and let frames grow with text.
 - **Do** keep state transitions at 150 ms and overlays at 200 ms, and honor `reduce_motion()`.
 - **Do** keep iOS and Android headers, back gestures and alerts native.
+- **Do** draw icons from the one set (`icon(Icon, size)`), 1.5 pt strokes, tinted by a token.
+- **Do** open a row's detail in a drawer, with its focus rings clear of the scroll edge.
+- **Do** set numbers and addresses in Mono, one line, right-aligned in tables, with a muted dash when missing.
 
 ### Don't:
 - **Don't** write hex, `rgb()`, `hsl()` or Tailwind palette colors in UI code.
@@ -478,6 +685,12 @@ icon and `foreground` text. For exposure warnings (exit node, subnet proxy, encr
 - **Don't** use red for anything but failure and destruction, or amber as "important".
 - **Don't** put shadows on cards, lists, the sidebar or headers, or use glass and blur.
 - **Don't** use uppercase or letter-spaced labels, or an eyebrow above a heading.
+- **Don't** put a colored border thicker than 1 pt on a card, row or callout; a selected row is a fill, not a stripe.
 - **Don't** use a radius other than 6 pt, 8 pt or a pill.
 - **Don't** fix the height of anything that holds text.
 - **Don't** show a peer or network as connected before the core reports it.
+- **Don't** let a number, address, version or id wrap: cut it with an ellipsis or widen its column.
+- **Don't** use a Unicode glyph or emoji as an icon, a bullet, a chevron or a check: draw it from the icon set.
+- **Don't** put an entity's detail or editing in a centered modal when a drawer fits; keep modals for short
+  confirmations and multi-step creation.
+- **Don't** draw a sparkline or chart from anything but samples the core reported.

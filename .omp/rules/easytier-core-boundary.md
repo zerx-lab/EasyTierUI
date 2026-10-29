@@ -28,7 +28,7 @@ Physical limits, not product choices: a browser cannot create a TUN or listen on
 | | Node | Console | Control-plane host |
 |---|---|---|---|
 | macOS / Windows / Linux desktop | `sidecar`: official `easytier-core` process | `remote` | `controlplane`: official `easytier-web` process, opt-in |
-| Android | `embedded` (VpnService TUN fd) | `remote` | remote host only (console) + `deploy` artifacts |
+| Android | `embedded` (no TUN until a host app supplies a VpnService fd: NSH 0.3 packaging cannot declare one) | `remote` | remote host only (console) + `deploy` artifacts |
 | iOS | `embedded`, no TUN until a packet tunnel exists (open decision) | `remote` | remote host only (console) + `deploy` artifacts |
 | Web (served on the server) | the server's own `easytier-core`, enrolled as a managed machine of the co-located easytier-web | `remote`, same origin | it *is* the dashboard of that easytier-web; process settings change through `deploy` artifacts |
 
@@ -40,7 +40,7 @@ All of them implement traits in `src/core/` and speak the app's own domain types
 |---|---|
 | `sidecar` | runs the official `easytier-core` release binary as a separate process (or an OS service it installed), configured by a TOML file the app renders, read through the same release's `easytier-cli -o json` on the loopback RPC portal |
 | `controlplane` | runs the official `easytier-web` binary of the same release as a separate process with app-chosen flags, database and logs in the app's data directory; administered through its REST API on loopback |
-| `embedded` | EasyTier's library, because iOS cannot spawn processes and Android hands the VpnService TUN fd to in-process Rust; pinned git rev; upgraded with app releases; needs an FFI crate (user decision, `rule://rust-no-unsafe`) |
+| `embedded` | EasyTier's library through `crates/easytier-mobile` (UniFFI; git-pinned to v2.6.4, mobile targets only), because iOS cannot spawn processes and Android hands the VpnService TUN fd to in-process Rust; upgraded with app releases; `set_tun_fd` is exported for a host app's VPN service |
 | `remote` | easytier-web's REST API (`/api/v1/…`) with its session cookie; on the web build, same origin |
 | `deploy` | renders server deployment artifacts (below); runs nothing itself |
 
@@ -69,11 +69,11 @@ On a Linux server the product is headless processes plus EasyTierUI's web build 
 
 ## Process management (`sidecar`, `controlplane`)
 
-- Spawn binaries directly with an argument vector, never through a shell, never with user text interpolated into a command string.
-- Validate a rendered config with `easytier-core --check-config -c <file>` before starting or replacing an instance; show its error output, redacted.
-- Own each child: capture stdout/stderr into the log ring (redacted), observe exit status, restart with backoff only while the user wants it up, leave no orphan after the app quits unless the user installed it as a service.
+- Spawn binaries directly with an argument vector, never through a shell, never with user text interpolated into a command string. Strip inherited `ET_*` variables from every child (each flag also reads `ET_<NAME>`).
+- Validate a rendered config with `easytier-core --check-config -c <file>` before starting or replacing an instance. 2.6.4 exits non-zero without printing why (the error is logged before its logger exists), so the app also parses the TOML itself to name a syntax error.
+- Own each child: capture stdout/stderr into the log ring (redacted — the core prints its whole config, secrets included, at startup), observe exit status, restart with backoff only while the user wants it up, leave no orphan after the app quits unless it was installed as a service.
 - One core instance per local profile; instance names derive from profile ids, not user text.
-- Privileges: TUN needs root / Administrator / `CAP_NET_ADMIN` (Windows also `wintun.dll`). Only the core is elevated, through the OS's mechanism, after the user agrees; the UI never runs elevated; `no_tun` profiles and easytier-web need no privileges.
+- Privileges: TUN needs root / Administrator / `CAP_NET_ADMIN` (Windows also `wintun.dll`). A TUN profile runs as the OS service `easytierui-<key>`, installed with `easytier-cli service --name <svc> install --core-path … --service-work-dir … --disable-autostart true -- -c <config> --rpc-portal 127.0.0.1:<port> --rpc-portal-whitelist … --disable-env-parsing --file-log-dir …`, then `service start` / `stop` / `uninstall`, each through the OS's elevation (`pkexec`; `osascript` with `quoted form of` argv; PowerShell `Start-Process -Verb RunAs`) after the user agreed. **A service never runs files the user can write**: the elevated step is the app's own executable re-run with a typed request (`--etui-privileged`, `core::sidecar::privileged`; no shell, values only as arguments), which copies `easytier-core`, `easytier-cli` and the rendered config into an administrator-only directory (macOS `/Library/Application Support/EasyTierUI/services/<key>/`, Linux `/var/lib/easytierui/<key>/`, Windows `%ProgramData%\EasyTierUI\<key>\` with an `icacls` ACL: Administrators and SYSTEM only, Users may only list and read `logs\`), refuses any directory on the way that is not owned by root / the administrator, writable by others or a symlink / reparse point, checks the copies' sha256 against the digests the app computed just before the prompt, and runs the copied CLI. Every service argument (core path, `-c`, working and log directories) points at those copies; later `service start` / `stop` run the copied CLI; a changed config or release is copied again through the same step; uninstall removes the directory. On Linux `easytier-cli` writes the unit's arguments unquoted; the fixed directory names contain no space, quote, `%` or `$`. The UI never runs elevated; `no_tun` profiles, managed instances and easytier-web need no privileges.
 
 ## Reading state
 
