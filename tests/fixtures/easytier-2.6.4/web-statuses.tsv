@@ -1,0 +1,28 @@
+file	http_status	request
+web-after-logout.json	401	http://127.0.0.1:41211/api/v1/auth/check_login_status
+web-delete.json	200	-X DELETE http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/00000000-0000-0000-0000-0000000000aa
+web-get-config.json	200	http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/config/00000000-0000-0000-0000-0000000000aa
+web-info-all.json	200	-X GET -d {"inst_ids":null} http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/info
+web-info-one.json	200	http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/info/00000000-0000-0000-0000-0000000000aa
+web-list-after-delete.json	200	http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks
+web-list-after-disable.json	200	http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks
+web-list-networks.json	200	http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks
+web-login-malformed.json	422	-X POST -d {"username":1} http://127.0.0.1:41211/api/v1/auth/login
+web-logout.json	200	http://127.0.0.1:41211/api/v1/auth/logout
+web-machine-notfound.json	404	http://127.0.0.1:41211/api/v1/machines/ffffffff-ffff-ffff-ffff-ffffffffffff/networks
+web-metas.json	200	-X POST -d {"instance_ids":["00000000-0000-0000-0000-0000000000aa"]} http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/metas
+web-parse-bad.json	200	-X POST -d {"toml_config":"x = ["} http://127.0.0.1:41211/api/v1/parse-config
+web-proxy-rpc-bad.json	400	-X POST -d {"service_name":"nope","method_name":"x","payload":{}} http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/proxy-rpc
+web-proxy-rpc.json	200	-X POST -d {"service_name":"api.instance.PeerManageRpcService","method_name":"ListPeer","payload":{"instance":{"inst_id":{"part1":0,"part2":0,"part3":0,"part4":170}}}} http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/proxy-rpc
+web-pw-after-check.json	401	http://127.0.0.1:41211/api/v1/auth/check_login_status
+web-pw-change.json	200	-X PUT -d {"new_password":"38cfe0b2a2e7b9be1c13b2cfbc1c990e"} http://127.0.0.1:41211/api/v1/auth/password
+web-pw-login.json	200	-X POST -d {"username":"user","password":"ee11cbb19052e40b07aac0ca060c23ee"} http://127.0.0.1:41211/api/v1/auth/login
+web-pw-new-login.json	200	-X POST -d {"username":"user","password":"38cfe0b2a2e7b9be1c13b2cfbc1c990e"} http://127.0.0.1:41211/api/v1/auth/login
+web-pw-old-login.json	401	-X POST -d {"username":"user","password":"ee11cbb19052e40b07aac0ca060c23ee"} http://127.0.0.1:41211/api/v1/auth/login
+web-register.json	400	-X POST -d {"credentials":{"username":"zz","password":"x"},"captcha":"0000"} http://127.0.0.1:41211/api/v1/auth/register
+web-run.json	200	-X POST -d @run-req.json http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks
+web-save-mismatch.json	400	-X PUT -d @save-req.json http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/config/00000000-0000-0000-0000-0000000000bb
+web-save.json	200	-X PUT -d @save-req.json http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/config/00000000-0000-0000-0000-0000000000aa
+web-state-disable.json	200	-X PUT -d {"disabled":true} http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/00000000-0000-0000-0000-0000000000aa
+web-state-enable.json	200	-X PUT -d {"disabled":false} http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/networks/00000000-0000-0000-0000-0000000000aa
+web-validate.json	200	-X POST -d @cfg-req.json http://127.0.0.1:41211/api/v1/machines/00000000-0000-0000-0000-000000000001/validate-config

@@ -1,0 +1,33 @@
+A full meshed p2p VPN, connecting all your devices in one network with one command.
+
+Usage: easytier-cli [OPTIONS] <COMMAND>
+
+Commands:
+  peer              show peers info
+  connector         manage connectors
+  mapped-listener   manage mapped listeners
+  stun              do stun test
+  route             show route info
+  peer-center       show global peers info
+  vpn-portal        show vpn portal (wireguard) info
+  node              inspect self easytier-core status
+  service           manage easytier-core as a system service
+  proxy             show tcp/kcp proxy status
+  acl               show ACL rules statistics
+  port-forward      manage port forwarding
+  whitelist         manage TCP/UDP whitelist
+  stats             show statistics information
+  logger            manage logger configuration
+  credential        manage temporary credentials
+  gen-autocomplete  generate shell completions
+  help              Print this message or the help of the given subcommand(s)
+
+Options:
+  -p, --rpc-portal <RPC_PORTAL>  easytier-core rpc portal address [default: 127.0.0.1:15888]
+  -v, --verbose                  verbose output
+  -o, --output <OUTPUT_FORMAT>   output format [default: table] [possible values: table, json]
+      --no-trunc                 disable column truncation
+  -i, --instance-id <ID>         the instance id
+  -n, --instance-name <NAME>     the instance name
+  -h, --help                     Print help
+  -V, --version                  Print version

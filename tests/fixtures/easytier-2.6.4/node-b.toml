@@ -1,0 +1,13 @@
+instance_name = "b"
+ipv4 = "10.144.144.2/24"
+hostname = "example-host-b"
+listeners = ["tcp://127.0.0.1:41011"]
+
+[network_identity]
+network_name = "example-net"
+network_secret = "example-secret-do-not-use"
+
+[flags]
+
+[[peer]]
+uri = "tcp://127.0.0.1:41010"

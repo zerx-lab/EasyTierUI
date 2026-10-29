@@ -1,0 +1,30 @@
+[
+  {
+    "cidr": "10.144.144.1/24",
+    "ipv4": "10.144.144.1",
+    "hostname": "example-host-a",
+    "cost": "Local",
+    "lat_ms": "-",
+    "loss_rate": "-",
+    "rx_bytes": "-",
+    "tx_bytes": "-",
+    "tunnel_proto": "-",
+    "nat_type": "PortRestricted",
+    "id": "4088092882",
+    "version": "2.6.4-8428a89d"
+  },
+  {
+    "cidr": "10.144.144.2/24",
+    "ipv4": "10.144.144.2",
+    "hostname": "example-host-b",
+    "cost": "p2p",
+    "lat_ms": "0.10",
+    "loss_rate": "0.0%",
+    "rx_bytes": "1.59 kB",
+    "tx_bytes": "2.01 kB",
+    "tunnel_proto": "tcp",
+    "nat_type": "PortRestricted",
+    "id": "979611292",
+    "version": "2.6.4-8428a89d"
+  }
+]

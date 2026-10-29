@@ -1,0 +1,82 @@
+Config server for easytier. easytier-core gets config from this and web frontend use it as restful
+api server.
+
+Usage: easytier-web-embed [OPTIONS]
+
+Options:
+  -d, --db <DB>
+          path to the sqlite3 database file, used to save all the data [default: et.db]
+      --console-log-level <CONSOLE_LOG_LEVEL>
+          The log level for the console logger. Possible values: trace, debug, info, warn, error
+      --file-log-level <FILE_LOG_LEVEL>
+          The log level for the file logger. Possible values: trace, debug, info, warn, error
+      --file-log-dir <FILE_LOG_DIR>
+          The directory to save the log files, default is the current directory
+  -c, --config-server-port <CONFIG_SERVER_PORT>
+          The port to listen for the config server, used by the easytier-core to connect to
+          [default: 22020]
+  -p, --config-server-protocol <CONFIG_SERVER_PROTOCOL>
+          The protocol to listen for the config server, used by the easytier-core to connect to,
+          possible values: udp, tcp, ws [default: udp]
+  -a, --api-server-port <API_SERVER_PORT>
+          The port to listen for the restful server, acting as ApiHost and used by the web frontend
+          [default: 11211]
+      --api-server-addr <API_SERVER_ADDR>
+          The listen address for the restful server, e.g. 0.0.0.0, ::, 127.0.0.1 [default: 0.0.0.0]
+      --geoip-db <GEOIP_DB>
+          The path to the GeoIP2 database file, used to lookup the location of the client, default
+          is the embedded file (only country information) , recommend
+          https://github.com/P3TERX/GeoLite.mmdb
+  -l, --web-server-port <WEB_SERVER_PORT>
+          The port to listen for the web dashboard server, default is same as the api server port
+      --web-server-addr <WEB_SERVER_ADDR>
+          The listen address for the web dashboard server (only effective when web_server_port
+          differs from api_server_port or web_server_addr differs from api_server_addr), e.g.
+          0.0.0.0, ::, 127.0.0.1 [default: 0.0.0.0]
+      --no-web
+          Do not run the web dashboard server
+      --api-host <API_HOST>
+          The URL of the API server, used by the web frontend to connect to
+      --disable-registration
+          Disable user registration
+      --allow-auto-create-user
+          Allow auto-creating local user when easytier-core connects with an unknown username
+      --oidc-issuer-url <OIDC_ISSUER_URL>
+          The OIDC issuer URL for single sign-on authentication
+      --oidc-client-id <OIDC_CLIENT_ID>
+          The OIDC client ID
+      --oidc-client-secret <OIDC_CLIENT_SECRET>
+          The OIDC client secret (can also be set via OIDC_CLIENT_SECRET env var) [env:
+          OIDC_CLIENT_SECRET=]
+      --oidc-username-claim <OIDC_USERNAME_CLAIM>
+          The OIDC claim to use as the local username, default: preferred_username [default:
+          preferred_username]
+      --oidc-scopes <OIDC_SCOPES>
+          OIDC scopes to request during login. Supports comma-separated values or repeated
+          --oidc-scopes flags, default: openid,profile [default: openid profile]
+      --oidc-redirect-url <OIDC_REDIRECT_URL>
+          The OIDC redirect URL (callback URL), must match exactly what is registered with your
+          Identity Provider. Required when using OIDC. Example:
+          http://your-domain.com:11211/api/v1/auth/oidc/callback
+      --oidc-disable-pkce
+          Disable PKCE (Proof Key for Code Exchange) for OIDC authentication
+      --oidc-frontend-base-url <OIDC_FRONTEND_BASE_URL>
+          Frontend base URL to redirect to after successful OIDC callback. Required when frontend
+          and API are deployed separately (non-embed build, --no-web mode, or different
+          web_server_port)
+      --webhook-url <WEBHOOK_URL>
+          Base URL of the webhook endpoint for token validation and event delivery. When set,
+          incoming tokens are validated via this webhook before local fallback
+      --webhook-secret <WEBHOOK_SECRET>
+          Shared secret used to authenticate outbound webhook calls
+      --internal-auth-token <INTERNAL_AUTH_TOKEN>
+          Token for X-Internal-Auth header. When set, API requests with this header bypass session
+          authentication
+      --web-instance-id <WEB_INSTANCE_ID>
+          Stable identifier for this easytier-web instance when routing webhook callbacks
+      --web-instance-api-base-url <WEB_INSTANCE_API_BASE_URL>
+          Reachable base URL for this easytier-web instance's internal REST API
+  -h, --help
+          Print help
+  -V, --version
+          Print version

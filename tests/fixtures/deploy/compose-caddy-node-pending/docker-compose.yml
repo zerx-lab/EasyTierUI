@@ -1,0 +1,111 @@
+# EasyTierUI deployment: easytier-web v2.6.4 behind Caddy for vpn.example.com.
+# Rendered, not applied. Review it, then run `docker compose up -d` on the server (README.md has the order).
+#
+# Network layout
+#   edge network  web and proxy. The REST API listens here only: the proxy reaches it as web:11211,
+#                 nothing publishes it to the internet.
+#   published     proxy 80/tcp and 443/tcp; the config server 22020/udp (see HARDENING SWITCH);
+#                 the REST API on the host's loopback only (127.0.0.1), for the SSH tunnel used to harden the server.
+#   never         the node's RPC portal: it binds 127.0.0.1 inside web's network namespace and is not published.
+# Images are pinned by digest; the tag is only a label. Digests read from the registry on 2026-10-29.
+
+name: easytier
+
+services:
+  web:
+    image: easytier/easytier:v2.6.4@sha256:91d6732ea5ff71542fdb99333d2ee7b168e973443114db84db061e452427d91e
+    # The image's entrypoint is easytier-core; this service runs easytier-web from the same release.
+    entrypoint: ["/sbin/tini", "--", "easytier-web"]
+    command:
+      - "--db"
+      - "/data/et.db"
+      - "--api-server-addr"
+      - "0.0.0.0"
+      - "--api-server-port"
+      - "11211"
+      - "--config-server-port"
+      - "22020"
+      - "--config-server-protocol"
+      - "udp"
+      # HARDENING SWITCH: registration stays open until the owner account exists. After first-run
+      # hardening, re-render with hardening done (or uncomment the next line) and `docker compose up -d`.
+      # - "--disable-registration"
+    restart: unless-stopped
+    ports:
+      # REST API: host loopback only (SSH tunnel). The proxy reaches it over the edge network.
+      - "127.0.0.1:11211:11211"
+      # HARDENING SWITCH: the config server stays on the loopback until hardening is done; then drop
+      # the `127.0.0.1:` prefix to let remote nodes enroll. Docker publishes bypass ufw / firewalld.
+      - "127.0.0.1:22020:22020/udp"
+    volumes:
+      - easytier-web-data:/data
+    environment:
+      TZ: UTC
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+
+  # The server as a node (relay). It shares web's network namespace so ET_CONFIG_SERVER points at the container's
+  # own loopback, and its RPC portal is bound to 127.0.0.1 there. Start it after the owner account exists (README).
+  node:
+    image: easytier/easytier:v2.6.4@sha256:91d6732ea5ff71542fdb99333d2ee7b168e973443114db84db061e452427d91e
+    network_mode: "service:web"
+    depends_on:
+      - web
+    command:
+      - "--rpc-portal"
+      - "127.0.0.1:15888"
+      - "--rpc-portal-whitelist"
+      - "127.0.0.1/32,::1/128"
+      - "--disable-env-parsing"
+    # ET_CONFIG_SERVER (the enrollment URL) lives in .env, mode 0600; it is never on a command line.
+    env_file:
+      - .env
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    security_opt:
+      - no-new-privileges:true
+
+  proxy:
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - "/srv/easytierui:/srv/www:ro"
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+
+volumes:
+  easytier-web-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  edge: {}

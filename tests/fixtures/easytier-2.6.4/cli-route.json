@@ -1,0 +1,32 @@
+[
+  {
+    "ipv4": "10.144.144.1/24",
+    "hostname": "example-host-a",
+    "proxy_cidrs": "192.168.50.0/24",
+    "next_hop_ipv4": "-",
+    "next_hop_hostname": "Local",
+    "next_hop_lat": 0.0,
+    "path_len": 0,
+    "path_latency": 0,
+    "next_hop_ipv4_lat_first": "-",
+    "next_hop_hostname_lat_first": "Local",
+    "path_len_lat_first": 0,
+    "path_latency_lat_first": 0,
+    "version": "2.6.4-8428a89d"
+  },
+  {
+    "ipv4": "10.144.144.2/24",
+    "hostname": "example-host-b",
+    "proxy_cidrs": "",
+    "next_hop_ipv4": "DIRECT",
+    "next_hop_hostname": "DIRECT",
+    "next_hop_lat": 0.101,
+    "path_len": 1,
+    "path_latency": 500,
+    "next_hop_ipv4_lat_first": "DIRECT",
+    "next_hop_hostname_lat_first": "DIRECT",
+    "path_len_lat_first": 1,
+    "path_latency_lat_first": 500,
+    "version": "2.6.4-8428a89d"
+  }
+]

@@ -1,0 +1,18 @@
+instance_name = "a"
+ipv4 = "10.144.144.1/24"
+hostname = "example-host-a"
+listeners = ["tcp://127.0.0.1:41010"]
+
+[network_identity]
+network_name = "example-net"
+network_secret = "example-secret-do-not-use"
+
+[flags]
+
+[[proxy_network]]
+cidr = "192.168.50.0/24"
+
+[[port_forward]]
+bind_addr = "127.0.0.1:41200"
+dst_addr = "10.144.144.1:41201"
+proto = "tcp"

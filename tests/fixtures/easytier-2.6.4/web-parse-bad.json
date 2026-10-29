@@ -1,0 +1,1 @@
+{"error":"failed to parse config file: x = [\n\nCaused by:\n    TOML parse error at line 1, column 6\n      |\n    1 | x = [\n      |      ^\n    invalid array\n    expected `]`\n    ","config":null}

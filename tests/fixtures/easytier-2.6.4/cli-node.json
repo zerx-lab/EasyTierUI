@@ -1,0 +1,70 @@
+{
+  "peer_id": 4088092882,
+  "ipv4_addr": "10.144.144.1/24",
+  "proxy_cidrs": [
+    "192.168.50.0/24"
+  ],
+  "hostname": "example-host-a",
+  "stun_info": {
+    "udp_nat_type": 5,
+    "tcp_nat_type": 6,
+    "last_update_time": 1793229744,
+    "public_ip": [
+      "203.0.113.10",
+      "203.0.113.11",
+      "2001:db8::1"
+    ],
+    "min_port": 7584,
+    "max_port": 7584
+  },
+  "inst_id": "00000000-0000-0000-0000-000000000002",
+  "listeners": [
+    "ring://00000000-0000-0000-0000-000000000002",
+    "tcp://127.0.0.1:41010"
+  ],
+  "config": "hostname = \"example-host-a\"\ninstance_name = \"a\"\ninstance_id = \"00000000-0000-0000-0000-000000000002\"\nipv4 = \"10.144.144.1/24\"\nlisteners = [\"tcp://127.0.0.1:41010\"]\ntcp_whitelist = []\nudp_whitelist = []\n\n[network_identity]\nnetwork_name = \"example-net\"\nnetwork_secret = \"example-secret-do-not-use\"\n\n[[proxy_network]]\ncidr = \"192.168.50.0/24\"\n\n[[port_forward]]\nbind_addr = \"127.0.0.1:41200\"\ndst_addr = \"10.144.144.1:41201\"\nproto = \"tcp\"\n\n[flags]\nno_tun = true\n",
+  "version": "2.6.4-8428a89d",
+  "feature_flag": {
+    "is_public_server": false,
+    "avoid_relay_data": false,
+    "kcp_input": true,
+    "no_relay_kcp": false,
+    "support_conn_list_sync": true,
+    "quic_input": true,
+    "no_relay_quic": false,
+    "is_credential_peer": false,
+    "need_p2p": false,
+    "disable_p2p": false,
+    "ipv6_public_addr_provider": false
+  },
+  "ip_list": {
+    "public_ipv4": {
+      "addr": 3405803786
+    },
+    "interface_ipv4s": [
+      {
+        "addr": 3221225985
+      },
+      {
+        "addr": 3221225986
+      }
+    ],
+    "public_ipv6": {
+      "part1":536939960,"part2":0,"part3":0,"part4":1
+    },
+    "interface_ipv6s": [
+      {
+        "part1":536939960,"part2":0,"part3":0,"part4":1
+      },
+      {
+        "part1":536939960,"part2":0,"part3":0,"part4":1
+      },
+      {
+        "part1":536939960,"part2":0,"part3":0,"part4":2
+      }
+    ],
+    "listeners": []
+  },
+  "public_ipv6_addr": null,
+  "ipv6_public_addr_prefix": null
+}

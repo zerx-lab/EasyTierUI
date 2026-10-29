@@ -1,0 +1,83 @@
+[
+  {
+    "tag_name": "v2.6.4",
+    "name": "v2.6.4",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-05-12T14:31:08Z",
+    "assets": [
+      {
+        "name": "easytier-linux-x86_64-v2.6.4.zip",
+        "size": 25506523,
+        "digest": "sha256:61b659eaedba658fa66fe47d17e1426cdd77e5d02fa15fed447bb4357c09dfd6",
+        "browser_download_url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-linux-x86_64-v2.6.4.zip"
+      },
+      {
+        "name": "easytier-macos-aarch64-v2.6.4.zip",
+        "size": 30174017,
+        "digest": "sha256:4be1882d1aa36d31c1d6ba0596f2cf8a097e371f8da124212324b2e0f8df7e4b",
+        "browser_download_url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-macos-aarch64-v2.6.4.zip"
+      },
+      {
+        "name": "easytier-windows-x86_64-v2.6.4.zip",
+        "size": 32657720,
+        "digest": "sha256:27af91e270e554709b048bd32327fefd2dfce5062ae1e8701af7550c6f525f84",
+        "browser_download_url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-windows-x86_64-v2.6.4.zip"
+      },
+      {
+        "name": "easytier-web-dashboard-v2.6.4.zip",
+        "size": 862470,
+        "digest": "sha256:032a1d19f956c204497869ca956bde254c823785ebaf22bc2d88b8439b2a5030",
+        "browser_download_url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-web-dashboard-v2.6.4.zip"
+      }
+    ]
+  },
+  {
+    "tag_name": "v2.7.0-rc1",
+    "name": "v2.7.0-rc1",
+    "draft": false,
+    "prerelease": true,
+    "published_at": "2026-06-01T08:00:00Z",
+    "assets": [
+      {
+        "name": "easytier-linux-x86_64-v2.7.0-rc1.zip",
+        "size": 25600000,
+        "digest": null,
+        "browser_download_url": "https://github.com/EasyTier/EasyTier/releases/download/v2.7.0-rc1/easytier-linux-x86_64-v2.7.0-rc1.zip"
+      },
+      {
+        "name": "easytier-macos-aarch64-v2.7.0-rc1.zip",
+        "size": 30200000,
+        "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+        "browser_download_url": "https://github.com/EasyTier/EasyTier/releases/download/v2.7.0-rc1/easytier-macos-aarch64-v2.7.0-rc1.zip"
+      }
+    ]
+  },
+  {
+    "tag_name": "v2.8.0",
+    "draft": true,
+    "prerelease": false,
+    "published_at": null,
+    "assets": []
+  },
+  {
+    "tag_name": "v2.5.0",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-01-02T03:04:05Z",
+    "assets": [
+      {
+        "name": "easytier-linux-x86_64-v2.5.0.zip",
+        "size": 24000000,
+        "browser_download_url": "https://github.com/EasyTier/EasyTier/releases/download/v2.5.0/easytier-linux-x86_64-v2.5.0.zip"
+      }
+    ]
+  },
+  {
+    "tag_name": "nightly",
+    "draft": false,
+    "prerelease": true,
+    "published_at": "2026-06-02T00:00:00Z",
+    "assets": []
+  }
+]

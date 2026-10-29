@@ -1,0 +1,346 @@
+[
+  {
+    "name": "compression_bytes_rx_after",
+    "value": 1044,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "compression_bytes_rx_before",
+    "value": 1240,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "compression_bytes_tx_after",
+    "value": 1556,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "compression_bytes_tx_before",
+    "value": 1556,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "peer_rpc_client_rx",
+    "value": 1,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "get_global_peer_map",
+      "network_name": "example-net",
+      "service_name": "PeerCenterRpc",
+      "src_peer_id": "4088092882",
+      "status": "success"
+    }
+  },
+  {
+    "name": "peer_rpc_client_rx",
+    "value": 1,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "report_peers",
+      "network_name": "example-net",
+      "service_name": "PeerCenterRpc",
+      "src_peer_id": "4088092882",
+      "status": "success"
+    }
+  },
+  {
+    "name": "peer_rpc_client_rx",
+    "value": 3,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "sync_route_info",
+      "network_name": "example-net",
+      "service_name": "OspfRouteRpc",
+      "src_peer_id": "4088092882",
+      "status": "success"
+    }
+  },
+  {
+    "name": "peer_rpc_client_tx",
+    "value": 1,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "get_global_peer_map",
+      "network_name": "example-net",
+      "service_name": "PeerCenterRpc",
+      "src_peer_id": "4088092882"
+    }
+  },
+  {
+    "name": "peer_rpc_client_tx",
+    "value": 1,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "report_peers",
+      "network_name": "example-net",
+      "service_name": "PeerCenterRpc",
+      "src_peer_id": "4088092882"
+    }
+  },
+  {
+    "name": "peer_rpc_client_tx",
+    "value": 3,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "sync_route_info",
+      "network_name": "example-net",
+      "service_name": "OspfRouteRpc",
+      "src_peer_id": "4088092882"
+    }
+  },
+  {
+    "name": "peer_rpc_duration_ms",
+    "value": 0,
+    "labels": {
+      "dst_peer_id": "4088092882",
+      "method_name": "sync_route_info",
+      "network_name": "example-net",
+      "service_name": "OspfRouteRpc",
+      "src_peer_id": "979611292",
+      "status": "success"
+    }
+  },
+  {
+    "name": "peer_rpc_duration_ms",
+    "value": 0,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "get_global_peer_map",
+      "network_name": "example-net",
+      "service_name": "PeerCenterRpc",
+      "src_peer_id": "4088092882",
+      "status": "success"
+    }
+  },
+  {
+    "name": "peer_rpc_duration_ms",
+    "value": 0,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "report_peers",
+      "network_name": "example-net",
+      "service_name": "PeerCenterRpc",
+      "src_peer_id": "4088092882",
+      "status": "success"
+    }
+  },
+  {
+    "name": "peer_rpc_duration_ms",
+    "value": 0,
+    "labels": {
+      "dst_peer_id": "979611292",
+      "method_name": "sync_route_info",
+      "network_name": "example-net",
+      "service_name": "OspfRouteRpc",
+      "src_peer_id": "4088092882",
+      "status": "success"
+    }
+  },
+  {
+    "name": "peer_rpc_server_rx",
+    "value": 2,
+    "labels": {
+      "dst_peer_id": "4088092882",
+      "method_name": "sync_route_info",
+      "network_name": "example-net",
+      "service_name": "OspfRouteRpc",
+      "src_peer_id": "979611292"
+    }
+  },
+  {
+    "name": "peer_rpc_server_tx",
+    "value": 2,
+    "labels": {
+      "dst_peer_id": "4088092882",
+      "method_name": "sync_route_info",
+      "network_name": "example-net",
+      "service_name": "OspfRouteRpc",
+      "src_peer_id": "979611292",
+      "status": "success"
+    }
+  },
+  {
+    "name": "traffic_bytes_forwarded",
+    "value": 0,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_bytes_rx",
+    "value": 0,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_bytes_self_rx",
+    "value": 1240,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_bytes_self_tx",
+    "value": 1556,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_bytes_tx",
+    "value": 0,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_bytes_forwarded",
+    "value": 0,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_bytes_rx",
+    "value": 1594,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_bytes_rx_by_instance",
+    "value": 954,
+    "labels": {
+      "from_instance_id": "c2584941-8a0d-4519-9631-19bd5a1b56a9",
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_bytes_rx_by_instance",
+    "value": 286,
+    "labels": {
+      "from_instance_id": "unknown",
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_bytes_tx",
+    "value": 2006,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_bytes_tx_by_instance",
+    "value": 1236,
+    "labels": {
+      "network_name": "example-net",
+      "to_instance_id": "c2584941-8a0d-4519-9631-19bd5a1b56a9"
+    }
+  },
+  {
+    "name": "traffic_control_bytes_tx_by_instance",
+    "value": 320,
+    "labels": {
+      "network_name": "example-net",
+      "to_instance_id": "unknown"
+    }
+  },
+  {
+    "name": "traffic_control_packets_forwarded",
+    "value": 0,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_packets_rx",
+    "value": 17,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_packets_rx_by_instance",
+    "value": 6,
+    "labels": {
+      "from_instance_id": "c2584941-8a0d-4519-9631-19bd5a1b56a9",
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_packets_rx_by_instance",
+    "value": 1,
+    "labels": {
+      "from_instance_id": "unknown",
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_packets_tx",
+    "value": 17,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_control_packets_tx_by_instance",
+    "value": 6,
+    "labels": {
+      "network_name": "example-net",
+      "to_instance_id": "c2584941-8a0d-4519-9631-19bd5a1b56a9"
+    }
+  },
+  {
+    "name": "traffic_control_packets_tx_by_instance",
+    "value": 1,
+    "labels": {
+      "network_name": "example-net",
+      "to_instance_id": "unknown"
+    }
+  },
+  {
+    "name": "traffic_packets_forwarded",
+    "value": 0,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_packets_rx",
+    "value": 0,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_packets_self_rx",
+    "value": 7,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_packets_self_tx",
+    "value": 7,
+    "labels": {
+      "network_name": "example-net"
+    }
+  },
+  {
+    "name": "traffic_packets_tx",
+    "value": 0,
+    "labels": {
+      "network_name": "example-net"
+    }
+  }
+]

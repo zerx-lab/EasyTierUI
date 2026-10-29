@@ -45,12 +45,12 @@ fn the_sidebar_switches_pages_and_marks_the_selected_one() {
 #[test]
 fn a_browser_cannot_be_a_node_and_offers_the_servers_nodes() {
     let mut app = Device::desktop(Os::Web, 1200.0).start().unwrap();
-    // The served page's own server is the target: it opens on its console.
-    app.wait_for("Not connected to this server").unwrap();
+    // The served page's own server is the target: it opens on its console, which asks to sign in.
+    app.wait_for("Sign in to manage this server").unwrap();
     app.press("id:page-networks").unwrap();
     app.wait_for("This browser can't join a network.").unwrap();
     app.press("Manage this server's nodes").unwrap();
-    app.wait_for("Not connected to this server").unwrap();
+    app.wait_for("Sign in to manage this server").unwrap();
     assert!(app.screen().selected("id:page-machines").unwrap());
 }
 

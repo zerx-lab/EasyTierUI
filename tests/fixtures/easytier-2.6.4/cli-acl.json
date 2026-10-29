@@ -1,0 +1,8 @@
+{
+  "rules": [],
+  "conn_track": [],
+  "global": {
+    "CacheMaxSize": 1024,
+    "CacheSize": 0
+  }
+}

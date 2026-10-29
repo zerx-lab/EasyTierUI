@@ -1,0 +1,12 @@
+{
+  "udp_nat_type": 5,
+  "tcp_nat_type": 6,
+  "last_update_time": 1793229722,
+  "public_ip": [
+    "203.0.113.10",
+    "203.0.113.11",
+    "2001:db8::1"
+  ],
+  "min_port": 7551,
+  "max_port": 7551
+}

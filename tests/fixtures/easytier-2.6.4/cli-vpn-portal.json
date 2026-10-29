@@ -1,0 +1,5 @@
+{
+  "vpn_type": "wireguard",
+  "client_config": "ERROR: Wireguard VPN Portal Not Started",
+  "connected_clients": []
+}

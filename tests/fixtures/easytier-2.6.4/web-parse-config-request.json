@@ -1,0 +1,1 @@
+{"toml_config": "instance_name = \"b\"\nipv4 = \"10.144.144.2/24\"\nhostname = \"example-host-b\"\nlisteners = [\"tcp://127.0.0.1:41011\"]\n\n[network_identity]\nnetwork_name = \"example-net\"\nnetwork_secret = \"example-secret-do-not-use\"\n\n[flags]\n\n[[peer]]\nuri = \"tcp://127.0.0.1:41010\"\n"}

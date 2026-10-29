@@ -1,0 +1,39 @@
+# EasyTierUI deployment: Caddy for vpn.example.com (automatic HTTPS).
+# Rendered, not applied. Install as ./Caddyfile next to docker-compose.yml, then reload Caddy (README.md).
+{
+	email ops@example.com
+	# HTTP/3 would need 443/udp open; the firewall scripts open 80/tcp and 443/tcp only.
+	servers {
+		protocols h1 h2
+	}
+}
+
+vpn.example.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	@api path /api /api/*
+	handle @api {
+		# HARDENING SWITCH: closed. The seeded admin/admin and user/user accounts may still exist, so the API is
+		# not on the internet. Harden over an SSH tunnel (README.md), then re-render with hardening done, or replace
+		# the `respond` line by the commented block.
+		respond "The API is closed until the server is hardened." 403
+		# header Cache-Control "no-store"
+		# reverse_proxy web:11211
+	}
+
+	handle {
+		root * /srv/www
+		try_files {path} /index.html
+		file_server
+	}
+}

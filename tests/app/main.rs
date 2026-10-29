@@ -1,6 +1,24 @@
 //! The app's integration tests, headless on NSH's real engine: one binary, a module per area.
+//!
+//! The area modules are `#[cfg(test)]` (always true here) so clippy's test exemptions (`clippy.toml`) cover their
+//! helpers as they cover `#[test]` functions: a failed unwrap in a helper is a failed test.
 
+#[cfg(test)]
+mod components;
+#[cfg(test)]
+mod console;
+#[cfg(test)]
+mod host;
+#[cfg(test)]
+mod node;
+#[cfg(test)]
+mod remote;
+#[cfg(test)]
+mod settings;
+#[cfg(test)]
 mod shell;
+#[cfg(test)]
+mod smoke;
 
 use std::{
     collections::BTreeMap,
@@ -34,7 +52,7 @@ impl Device {
             width,
             height: 800.0,
             locale: "en-US",
-            storage: Arc::default(),
+            storage: MemoryStorage::for_tests(),
         }
     }
 
@@ -46,7 +64,7 @@ impl Device {
             width: 390.0,
             height: 844.0,
             locale: "en-US",
-            storage: Arc::default(),
+            storage: MemoryStorage::for_tests(),
         }
     }
 
@@ -79,6 +97,23 @@ impl Device {
 /// Storage kept in memory across the runs of one test.
 #[derive(Default)]
 pub struct MemoryStorage(Mutex<BTreeMap<String, String>>);
+
+impl MemoryStorage {
+    /// Storage that keeps the app's secrets in memory (never the developer's keychain) and its files in a
+    /// temporary directory of this test process.
+    pub fn for_tests() -> Arc<Self> {
+        let data_dir =
+            std::env::temp_dir().join(format!("easytierui-tests-{}", std::process::id()));
+        let entries = BTreeMap::from([
+            ("test.secret-store".to_owned(), "memory".to_owned()),
+            (
+                "test.data-dir".to_owned(),
+                data_dir.to_string_lossy().into_owned(),
+            ),
+        ]);
+        Arc::new(Self(Mutex::new(entries)))
+    }
+}
 
 impl StorageBackend for MemoryStorage {
     fn load(&self) -> Result<BTreeMap<String, String>, String> {

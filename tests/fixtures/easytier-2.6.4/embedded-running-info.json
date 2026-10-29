@@ -1,0 +1,269 @@
+{
+ "dev_name": "",
+ "my_node_info": {
+  "virtual_ipv4": {
+   "address": {
+    "addr": 177246722
+   },
+   "network_length": 24
+  },
+  "hostname": "example-host-b",
+  "version": "2.6.4-8428a89d",
+  "ips": {
+   "public_ipv4": {
+    "addr": 3405803777
+   },
+   "interface_ipv4s": [
+    {
+     "addr": 3221225985
+    }
+   ],
+   "public_ipv6": {
+    "part1": 536939960,
+    "part2": 0,
+    "part3": 0,
+    "part4": 1
+   },
+   "interface_ipv6s": [
+    {
+     "part1": 536939960,
+     "part2": 0,
+     "part3": 0,
+     "part4": 2
+    }
+   ],
+   "listeners": []
+  },
+  "stun_info": {
+   "udp_nat_type": 5,
+   "tcp_nat_type": 6,
+   "last_update_time": 1793235016,
+   "public_ip": [
+    "203.0.113.1",
+    "2001:db8::1"
+   ],
+   "min_port": 8674,
+   "max_port": 8674
+  },
+  "listeners": [
+   {
+    "url": "ring://00000000-0000-0000-0000-0000000000a2"
+   },
+   {
+    "url": "tcp://127.0.0.1:42011"
+   }
+  ],
+  "vpn_portal_cfg": "ERROR: Wireguard VPN Portal Not Started",
+  "peer_id": 246416169
+ },
+ "events": [
+  "{\"time\":\"2026-10-29T08:50:13.609686+08:00\",\"event\":{\"PeerAdded\":1088216467}}",
+  "{\"time\":\"2026-10-29T08:50:13.609658+08:00\",\"event\":{\"PeerConnAdded\":{\"conn_id\":\"00127856-65e6-4ad9-a654-be858aaae9bd\",\"my_peer_id\":246416169,\"peer_id\":1088216467,\"features\":[],\"tunnel\":{\"tunnel_type\":\"tcp\",\"local_addr\":{\"url\":\"tcp://192.0.2.1:61029\"},\"remote_addr\":{\"url\":\"tcp://127.0.0.1:42010\"},\"resolved_remote_addr\":{\"url\":\"tcp://127.0.0.1:42010\"}},\"stats\":{\"rx_bytes\":81,\"tx_bytes\":96,\"rx_packets\":1,\"tx_packets\":1,\"latency_us\":0},\"loss_rate\":0.0,\"is_client\":true,\"network_name\":\"example-net\",\"is_closed\":false,\"noise_local_static_pubkey\":[],\"noise_remote_static_pubkey\":[],\"secure_auth_level\":0,\"peer_identity_type\":0}}}",
+  "{\"time\":\"2026-10-29T08:50:13.606689+08:00\",\"event\":{\"Connecting\":\"tcp://127.0.0.1:42010\"}}",
+  "{\"time\":\"2026-10-29T08:50:12.587805+08:00\",\"event\":{\"ListenerAdded\":\"tcp://127.0.0.1:42011\"}}",
+  "{\"time\":\"2026-10-29T08:50:12.585359+08:00\",\"event\":{\"ListenerAdded\":\"ring://00000000-0000-0000-0000-0000000000a2\"}}"
+ ],
+ "routes": [
+  {
+   "peer_id": 1088216467,
+   "ipv4_addr": {
+    "address": {
+     "addr": 177246721
+    },
+    "network_length": 24
+   },
+   "next_hop_peer_id": 1088216467,
+   "cost": 1,
+   "path_latency": 1,
+   "proxy_cidrs": [],
+   "hostname": "example-host-a",
+   "stun_info": {
+    "udp_nat_type": 5,
+    "tcp_nat_type": 6,
+    "last_update_time": 0,
+    "public_ip": [],
+    "min_port": 0,
+    "max_port": 0
+   },
+   "inst_id": "00000000-0000-0000-0000-0000000000a1",
+   "version": "2.6.4-8428a89d",
+   "feature_flag": {
+    "is_public_server": false,
+    "avoid_relay_data": false,
+    "kcp_input": true,
+    "no_relay_kcp": false,
+    "support_conn_list_sync": true,
+    "quic_input": true,
+    "no_relay_quic": false,
+    "is_credential_peer": false,
+    "need_p2p": false,
+    "disable_p2p": false,
+    "ipv6_public_addr_provider": false
+   },
+   "next_hop_peer_id_latency_first": 1088216467,
+   "cost_latency_first": 1,
+   "path_latency_latency_first": 1,
+   "ipv6_addr": null,
+   "public_ipv6_addr": null,
+   "ipv6_public_addr_prefix": null
+  }
+ ],
+ "peers": [
+  {
+   "peer_id": 1088216467,
+   "conns": [
+    {
+     "conn_id": "00127856-65e6-4ad9-a654-be858aaae9bd",
+     "my_peer_id": 246416169,
+     "peer_id": 1088216467,
+     "features": [],
+     "tunnel": {
+      "tunnel_type": "tcp",
+      "local_addr": {
+       "url": "tcp://192.0.2.1:61029"
+      },
+      "remote_addr": {
+       "url": "tcp://127.0.0.1:42010"
+      },
+      "resolved_remote_addr": {
+       "url": "tcp://127.0.0.1:42010"
+      }
+     },
+     "stats": {
+      "rx_bytes": 1683,
+      "tx_bytes": 1871,
+      "rx_packets": 15,
+      "tx_packets": 15,
+      "latency_us": 97
+     },
+     "loss_rate": 0.0,
+     "is_client": true,
+     "network_name": "example-net",
+     "is_closed": false,
+     "noise_local_static_pubkey": [],
+     "noise_remote_static_pubkey": [],
+     "secure_auth_level": 0,
+     "peer_identity_type": 0
+    }
+   ],
+   "default_conn_id": {
+    "part1": 1210454,
+    "part2": 1709591257,
+    "part3": 2790571653,
+    "part4": 2326456765
+   },
+   "directly_connected_conns": [
+    {
+     "part1": 1210454,
+     "part2": 1709591257,
+     "part3": 2790571653,
+     "part4": 2326456765
+    }
+   ]
+  }
+ ],
+ "peer_route_pairs": [
+  {
+   "route": {
+    "peer_id": 1088216467,
+    "ipv4_addr": {
+     "address": {
+      "addr": 177246721
+     },
+     "network_length": 24
+    },
+    "next_hop_peer_id": 1088216467,
+    "cost": 1,
+    "path_latency": 1,
+    "proxy_cidrs": [],
+    "hostname": "example-host-a",
+    "stun_info": {
+     "udp_nat_type": 5,
+     "tcp_nat_type": 6,
+     "last_update_time": 0,
+     "public_ip": [],
+     "min_port": 0,
+     "max_port": 0
+    },
+    "inst_id": "00000000-0000-0000-0000-0000000000a1",
+    "version": "2.6.4-8428a89d",
+    "feature_flag": {
+     "is_public_server": false,
+     "avoid_relay_data": false,
+     "kcp_input": true,
+     "no_relay_kcp": false,
+     "support_conn_list_sync": true,
+     "quic_input": true,
+     "no_relay_quic": false,
+     "is_credential_peer": false,
+     "need_p2p": false,
+     "disable_p2p": false,
+     "ipv6_public_addr_provider": false
+    },
+    "next_hop_peer_id_latency_first": 1088216467,
+    "cost_latency_first": 1,
+    "path_latency_latency_first": 1,
+    "ipv6_addr": null,
+    "public_ipv6_addr": null,
+    "ipv6_public_addr_prefix": null
+   },
+   "peer": {
+    "peer_id": 1088216467,
+    "conns": [
+     {
+      "conn_id": "00127856-65e6-4ad9-a654-be858aaae9bd",
+      "my_peer_id": 246416169,
+      "peer_id": 1088216467,
+      "features": [],
+      "tunnel": {
+       "tunnel_type": "tcp",
+       "local_addr": {
+        "url": "tcp://192.0.2.1:61029"
+       },
+       "remote_addr": {
+        "url": "tcp://127.0.0.1:42010"
+       },
+       "resolved_remote_addr": {
+        "url": "tcp://127.0.0.1:42010"
+       }
+      },
+      "stats": {
+       "rx_bytes": 1683,
+       "tx_bytes": 1871,
+       "rx_packets": 15,
+       "tx_packets": 15,
+       "latency_us": 97
+      },
+      "loss_rate": 0.0,
+      "is_client": true,
+      "network_name": "example-net",
+      "is_closed": false,
+      "noise_local_static_pubkey": [],
+      "noise_remote_static_pubkey": [],
+      "secure_auth_level": 0,
+      "peer_identity_type": 0
+     }
+    ],
+    "default_conn_id": {
+     "part1": 1210454,
+     "part2": 1709591257,
+     "part3": 2790571653,
+     "part4": 2326456765
+    },
+    "directly_connected_conns": [
+     {
+      "part1": 1210454,
+      "part2": 1709591257,
+      "part3": 2790571653,
+      "part4": 2326456765
+     }
+    ]
+   }
+  }
+ ],
+ "running": true,
+ "error_msg": null,
+ "foreign_network_summary": {
+  "info_map": {}
+ }
+}
