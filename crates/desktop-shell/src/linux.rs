@@ -1,6 +1,7 @@
 //! Linux: NSH's window is a `gtk::ApplicationWindow` of the default `gtk::Application`. Closing it is caught with
 //! GTK's `close-request` (hidden instead while the app keeps to the tray), and the application's `quit` action (Ctrl+Q)
-//! is replaced so that it still quits. Requests from other threads go through the default main context's idle queue.
+//! is replaced so that it still quits. Work from other threads (the app's engine thread, ksni's, the instance
+//! listener's) goes through the default main context's idle queue, which GTK's main thread runs.
 //! The tray host is a StatusNotifierWatcher on the session bus (KDE, and GNOME with the AppIndicator extension);
 //! without one there is no tray, and closing the window quits.
 
@@ -20,9 +21,9 @@ const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 const PROBE_TIMEOUT_MS: i32 = 1000;
 
 thread_local! {
-    /// `hook_window` ran: the close request and the quit action are ours.
+    /// GTK's main thread: `hook_window` ran, the close request and the quit action are ours.
     static HOOKED: Cell<bool> = const { Cell::new(false) };
-    /// The app is quitting: closes pass through.
+    /// GTK's main thread: the app is quitting, closes pass through.
     static QUITTING: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -73,18 +74,15 @@ fn tray_host_registered() -> Result<bool, glib::Error> {
         .unwrap_or(false))
 }
 
+/// GTK is initialized once NSH's application starts up, before it makes the window and loads the app; a headless run
+/// never initializes it. The flag is readable from any thread.
 pub(crate) fn has_window() -> bool {
-    gtk::is_initialized_main_thread() && window().is_some()
+    gtk::is_initialized()
 }
 
-/// Nothing to do before the window shows: it hides once the main loop runs ([`request`]).
-pub(crate) fn conceal() {}
-
-pub(crate) fn reveal() {}
-
-/// The UI thread is already in GTK's main loop: no wait is needed.
-pub(crate) fn defer(f: impl FnOnce() + Send + 'static) {
-    f();
+/// Runs `f` on GTK's main thread once it is idle (behind the window's first presentation).
+pub(crate) fn run_on_ui(f: impl FnOnce() + Send + 'static) {
+    glib::idle_add_once(f);
 }
 
 pub(crate) fn hook_window() -> Result<(), ShellError> {
@@ -134,9 +132,9 @@ pub(crate) fn quit() {
     }
 }
 
-/// Runs `action` on the UI thread once it is idle (behind the window's first presentation).
+/// Runs `action` on GTK's main thread, from any thread.
 pub(crate) fn request(action: Action) {
-    glib::idle_add_once(move || shell::perform(action));
+    run_on_ui(move || shell::perform(action));
 }
 
 /// The window manager decides focus on Linux: nothing to grant.

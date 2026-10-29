@@ -192,9 +192,11 @@ easytier-web --db <tmp>/et.db --api-server-addr 127.0.0.1   # a throwaway local 
 - **Login item**: per user, never a system service and never elevated — `~/Library/LaunchAgents/<id>.login.plist`,
   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, `$XDG_CONFIG_HOME/autostart/<id>.desktop` — pointing at the
   current executable (rewritten at start while on). Tests use the in-memory one (`test.login-item=memory`).
-- `crates/desktop-shell` attaches to NSH's window from the UI thread: a stand-in AppKit window delegate forwarding to
-  NSH's (macOS), a Win32 subclass of the `NshWindow` (Windows), GTK's `close-request` and a replaced `app.quit`
-  (Linux); tray-icon with its `ksni` backend on Linux (GTK 3 cannot share a process with NSH's GTK 4). Only
+- `crates/desktop-shell` attaches to NSH's window: a stand-in AppKit window delegate forwarding to NSH's (macOS), a
+  Win32 subclass of the `NshWindow` (Windows), GTK's `close-request` and a replaced `app.quit` (Linux); tray-icon with
+  its `ksni` backend on Linux (GTK 3 cannot share a process with NSH's GTK 4). NSH runs the app on its engine thread,
+  not the window's: the crate's API works from any thread and posts every window and tray step to the UI thread (the
+  main dispatch queue; a `WH_GETMESSAGE` hook on NSH's `nsh-ui` thread; GLib's default main context). Only
   `src/core/desktop.rs` names it.
 
 ### Security

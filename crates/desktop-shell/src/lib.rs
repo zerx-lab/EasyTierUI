@@ -2,11 +2,11 @@
 //! closing the window to the tray instead of quitting, starting with the window hidden, one running instance per
 //! user, and the login item that starts the app when the user signs in.
 //!
-//! NSH owns the window and its event loop; this crate finds that window from the UI thread and attaches to it:
-//! AppKit's window delegate (macOS, `macos.rs`), a Win32 subclass of NSH's window (Windows, `windows.rs`), GTK's
-//! `close-request` (Linux, `linux.rs`). The window only ever hides while a tray icon exists, so it can always be
-//! brought back. Everything but [`login`] and [`instance`] runs on the UI thread; requests from the tray's and the
-//! instance listener's threads are posted to it.
+//! NSH owns the window and its event loop; this crate finds that window and attaches to it: AppKit's window delegate
+//! (macOS, `macos.rs`), a Win32 subclass of NSH's window (Windows, `windows.rs`), GTK's `close-request` (Linux,
+//! `linux.rs`). The window only ever hides while a tray icon exists, so it can always be brought back. NSH runs the
+//! app's code on its engine thread, so the API may be called from any thread: every window and tray step is posted to
+//! the UI thread that owns the window, as are the requests from the tray's and the instance listener's threads.
 //!
 //! On targets without desktop windows the crate is empty.
 

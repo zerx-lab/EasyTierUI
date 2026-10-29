@@ -106,7 +106,7 @@ mod imp {
         }
     }
 
-    /// The tray icon and the window's close-to-tray, attached while it lives (UI thread only).
+    /// The tray icon and the window's close-to-tray, attached while it lives (its steps run on the UI thread).
     pub struct Tray(Shell);
 
     impl Tray {

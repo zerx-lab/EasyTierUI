@@ -1,8 +1,9 @@
 //! macOS: NSH's window has NSH's delegate (`NshAppDelegate`, also the app's delegate), whose `windowShouldClose:`
 //! stops the engine. A stand-in delegate takes its place and answers `windowShouldClose:` itself while the app keeps
-//! to the tray (the window orders out, the close is refused); everything else is forwarded to NSH's delegate. Requests
-//! from other threads go through the main dispatch queue, which also waits for AppKit's run loop that status items
-//! need. Clicking the Dock icon reopens the window through NSH's own reopen handler.
+//! to the tray (the window orders out, the close is refused); everything else is forwarded to NSH's delegate. Work
+//! from other threads (the app's engine thread, the tray's and the instance listener's) goes through the main dispatch
+//! queue, which also waits for AppKit's run loop that status items need. Clicking the Dock icon reopens the window
+//! through NSH's own reopen handler.
 #![expect(
     unsafe_code,
     reason = "a window delegate is an Objective-C class (`define_class!`) whose `init` is a message send; the user's \
@@ -15,7 +16,7 @@ use dispatch2::DispatchQueue;
 use objc2::{
     DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send,
     rc::Retained,
-    runtime::{Bool, NSObject, NSObjectProtocol, ProtocolObject},
+    runtime::{AnyClass, Bool, NSObject, NSObjectProtocol, ProtocolObject},
     sel,
 };
 use objc2_app_kit::{NSApplication, NSWindow, NSWindowDelegate};
@@ -94,29 +95,14 @@ pub(crate) fn probe_tray_host() -> bool {
     true
 }
 
-/// NSH's runner sets the app's delegate before it makes the window; a headless run has none (or is off the main
-/// thread).
+/// NSH's runner registers its app delegate's class (and sets the delegate) before it makes the window and loads the
+/// app; a headless run never does. The Objective-C runtime answers from any thread.
 pub(crate) fn has_window() -> bool {
-    MainThreadMarker::new()
-        .is_some_and(|mtm| NSApplication::sharedApplication(mtm).delegate().is_some())
+    AnyClass::get(c"NshAppDelegate").is_some()
 }
 
-/// Starting hidden: the window is made transparent before NSH orders it front, so it never flashes; it is ordered out
-/// (and made opaque again) once the run loop runs.
-pub(crate) fn conceal() {
-    if let Some(window) = MainThreadMarker::new().and_then(window) {
-        window.setAlphaValue(0.0);
-    }
-}
-
-pub(crate) fn reveal() {
-    if let Some(window) = MainThreadMarker::new().and_then(window) {
-        window.setAlphaValue(1.0);
-    }
-}
-
-/// Runs `f` on the main queue: after NSH's runner has started AppKit's run loop.
-pub(crate) fn defer(f: impl FnOnce() + Send + 'static) {
+/// Runs `f` on the main queue: on AppKit's thread, once NSH's runner has started its run loop.
+pub(crate) fn run_on_ui(f: impl FnOnce() + Send + 'static) {
     DispatchQueue::main().exec_async(f);
 }
 
@@ -144,7 +130,6 @@ pub(crate) fn show_window() {
         log::warn!("no window to show");
         return;
     };
-    window.setAlphaValue(1.0);
     if window.isMiniaturized() {
         window.deminiaturize(None);
     }
@@ -156,7 +141,6 @@ pub(crate) fn show_window() {
 pub(crate) fn hide_window() {
     if let Some(window) = MainThreadMarker::new().and_then(window) {
         window.orderOut(None);
-        window.setAlphaValue(1.0);
     }
 }
 
@@ -169,7 +153,7 @@ pub(crate) fn quit() {
 
 /// Runs `action` on the main thread, from any thread.
 pub(crate) fn request(action: Action) {
-    DispatchQueue::main().exec_async(move || shell::perform(action));
+    run_on_ui(move || shell::perform(action));
 }
 
 /// macOS lets an app activate itself when it is asked to: nothing to grant.

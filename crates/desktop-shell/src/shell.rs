@@ -1,11 +1,11 @@
 //! The shell's state on the UI thread and the API the app uses: [`Shell`] attaches to the window and owns the tray
 //! icon; [`quit`] ends the app as its menu's Quit would.
+//!
+//! NSH runs the app's code on its engine thread, not on the thread that owns the window and its event loop (the UI
+//! thread: AppKit's main thread, Windows' `nsh-ui`, GTK's main thread). So the API may be called from any thread, and
+//! every window or tray step is posted to the UI thread ([`platform::run_on_ui`]); the state below lives there.
 
-use std::{
-    cell::{Cell, RefCell},
-    marker::PhantomData,
-    rc::Rc,
-};
+use std::cell::{Cell, RefCell};
 
 use crate::{ShellError, platform, tray::Tray};
 
@@ -46,7 +46,7 @@ struct Config {
 }
 
 thread_local! {
-    /// Closing the window hides it. True only while [`TRAY`] holds an icon.
+    /// UI thread: closing the window hides it. True only while [`TRAY`] holds an icon.
     static KEEP: Cell<bool> = const { Cell::new(false) };
     static TRAY: RefCell<Option<Tray>> = const { RefCell::new(None) };
     static CONFIG: RefCell<Option<Config>> = const { RefCell::new(None) };
@@ -69,7 +69,8 @@ pub fn probe_tray_host() -> bool {
     platform::probe_tray_host()
 }
 
-/// Whether this thread has the app's NSH window: false in headless runs, where nothing here may touch the OS.
+/// Whether this process runs NSH's real window (from any thread): false in headless runs, where nothing here may
+/// touch the OS.
 pub fn has_window() -> bool {
     platform::has_window()
 }
@@ -79,15 +80,16 @@ pub fn quit() {
     platform::request(Action::Quit);
 }
 
-/// The window's tray integration, attached while it lives. Made and used on the UI thread only.
+/// The window's tray integration, attached while it lives. Made and used on any thread (the app's is NSH's engine
+/// thread); each step runs later on the UI thread, in the order asked.
 pub struct Shell {
-    _ui_thread: PhantomData<Rc<()>>,
+    _private: (),
 }
 
 impl Shell {
     /// Attaches to the app's window. With `keep_in_tray` a tray icon shows and closing the window hides it; with
-    /// `start_hidden` too, the window hides as soon as it is up (the tray icon brings it back). On macOS the work runs
-    /// once AppKit's event loop has started, which status items need.
+    /// `start_hidden` too, the window hides as soon as it is up (the tray icon brings it back). The work runs on the UI
+    /// thread once its event loop runs, which status items need.
     ///
     /// # Errors
     ///
@@ -102,59 +104,51 @@ impl Shell {
         if !platform::has_window() {
             return Err(ShellError::NoWindow);
         }
-        CONFIG.set(Some(Config { icons, labels }));
-        let start_hidden = start_hidden && keep_in_tray;
-        if start_hidden {
-            platform::conceal();
-        }
-        platform::defer(move || {
+        platform::run_on_ui(move || {
+            CONFIG.set(Some(Config { icons, labels }));
             if let Err(error) = platform::hook_window() {
                 log::error!("the tray cannot attach to the window: {error}");
-                platform::reveal();
                 return;
             }
             apply_keep(keep_in_tray);
+            // Behind NSH's first show: the event loop runs this only after the window is up.
+            if start_hidden {
+                perform(Action::Hide);
+            }
         });
-        if start_hidden {
-            // After the window is first shown: posted behind NSH's own show.
-            platform::request(Action::Hide);
-        }
-        Ok(Self {
-            _ui_thread: PhantomData,
-        })
+        Ok(Self { _private: () })
     }
 
     /// Shows or removes the tray icon; closing the window hides it while the icon shows.
     pub fn set_keep_in_tray(&self, on: bool) {
-        platform::defer(move || apply_keep(on));
+        platform::run_on_ui(move || apply_keep(on));
     }
 
     /// Words the tray's menu and tooltip in `labels`.
     pub fn set_labels(&self, labels: TrayLabels) {
-        TRAY.with_borrow(|tray| {
-            if let Some(tray) = tray {
-                tray.relabel(&labels);
-            }
+        platform::run_on_ui(move || {
+            TRAY.with_borrow(|tray| {
+                if let Some(tray) = tray {
+                    tray.relabel(&labels);
+                }
+            });
+            CONFIG.with_borrow_mut(|config| {
+                if let Some(config) = config {
+                    config.labels = labels;
+                }
+            });
         });
-        CONFIG.with_borrow_mut(|config| {
-            if let Some(config) = config {
-                config.labels = labels;
-            }
-        });
-    }
-
-    /// Whether the tray icon shows now.
-    pub fn tray_shown(&self) -> bool {
-        TRAY.with_borrow(Option::is_some)
     }
 }
 
 impl Drop for Shell {
     fn drop(&mut self) {
-        // The platform hooks stay (they may be running this very drop, inside the window's close); without the flag
+        // The platform hooks stay (they may be running at that moment, inside the window's close); without the flag
         // they pass every close through.
-        KEEP.set(false);
-        drop(TRAY.take());
+        platform::run_on_ui(|| {
+            KEEP.set(false);
+            drop(TRAY.take());
+        });
     }
 }
 
@@ -185,8 +179,8 @@ pub(crate) fn perform(action: Action) {
     match action {
         Action::Show => platform::show_window(),
         Action::Hide if keeps_in_tray() => platform::hide_window(),
-        // Nothing would bring it back: undo a start-hidden concealment instead.
-        Action::Hide => platform::reveal(),
+        // Nothing would bring it back: the window stays.
+        Action::Hide => log::warn!("the window stays: no tray icon to bring it back"),
         Action::Quit => {
             KEEP.set(false);
             platform::quit();
