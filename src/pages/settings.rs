@@ -1,25 +1,105 @@
-//! Settings: the UI's language and the app's version.
+//! Settings: the UI's language, the EasyTier programs, and the app's version, as grouped panels with an icon each.
+//! Language and About sit side by side on a wide window and stack on a narrow one; the EasyTier panel spans the page.
+
+mod adopt;
+mod installed;
+mod programs;
+mod releases;
 
 use nsh_base::theme;
 use nsh_core::prelude::*;
 
 use crate::{
-    components::{choice_row, machine_text, section_label},
+    components::{
+        ButtonKind, ICON_SIZE, Icon, action_button, choice_row, group, icon, machine_text,
+    },
     i18n::{Language, LanguageChoice},
-    store::Store,
+    store::{Page, Store},
 };
+
+/// The narrowest a panel of the top row gets before it wraps under its neighbour, in points.
+const PANEL_MIN_WIDTH: f32 = 280.0;
+
+/// The actions the settings page puts in the shell's page header: where the EasyTier programs are installed by the
+/// app, looking again for releases (here, on the PATH and on GitHub). Elsewhere the page has none.
+pub fn header_actions(store: Store, _page: Page) -> Option<AnyElement> {
+    let versions = store.versions();
+    if !versions.manages_programs() {
+        return None;
+    }
+    Some(
+        view()
+            .test_id("settings-check-updates")
+            .child(action_button(
+                ButtonKind::Secondary,
+                store.tr(|s| s.versions.check_updates),
+                move || {
+                    versions.refresh();
+                    versions.detect_path();
+                    versions.load_releases();
+                },
+            ))
+            .into_element(),
+    )
+}
 
 /// The settings page.
 pub fn settings(store: Store) -> View {
     view()
         .gap_6()
-        .child(section(store.tr(|s| s.settings_language), languages(store)))
-        .child(section(store.tr(|s| s.settings_about), about(store)))
+        .child(
+            view()
+                .flex_row()
+                .flex_wrap()
+                .items_start()
+                .gap_6()
+                .child(
+                    view()
+                        .flex_1()
+                        .min_w(Points(PANEL_MIN_WIDTH))
+                        .child(section(
+                            Icon::Globe,
+                            store.tr(|s| s.settings_language),
+                            languages(store),
+                        )),
+                )
+                .child(
+                    view()
+                        .flex_1()
+                        .min_w(Points(PANEL_MIN_WIDTH))
+                        .child(section(
+                            Icon::Info,
+                            store.tr(|s| s.settings_about),
+                            about(store),
+                        )),
+                ),
+        )
+        .child(programs::programs(store))
 }
 
-/// A section: its label above a grouped list.
-fn section(label: impl Fn() -> &'static str + 'static, body: View) -> View {
-    view().gap_2().child(section_label(label)).child(body)
+/// A panel's heading: its icon, then its name in Title weight.
+pub(super) fn heading(glyph: Icon, label: impl Fn() -> &'static str + 'static) -> View {
+    view()
+        .flex_row()
+        .items_center()
+        .gap_2()
+        .child(icon(glyph, ICON_SIZE))
+        .child(
+            text(label)
+                .text_base()
+                .font_weight(FontWeight::SEMIBOLD)
+                .role(AccessibilityRole::Header)
+                .text_color(move || theme().foreground),
+        )
+}
+
+/// A section: its heading above a body.
+pub(super) fn section(
+    glyph: Icon,
+    label: impl Fn() -> &'static str + 'static,
+    body: impl IntoElement,
+) -> View {
+    view().gap_3().child(heading(glyph, label)).child(body)
 }
 
 /// The language choices, one checked.
@@ -71,14 +151,4 @@ fn about(store: Store) -> View {
                     .text_color(move || theme().muted_foreground),
             ),
     )
-}
-
-/// A grouped list: panel fill, hairline, container radius (DESIGN.md "Flat Resting State Rule").
-fn group() -> View {
-    view()
-        .overflow_hidden()
-        .rounded(move || theme().radius)
-        .border_1()
-        .border_color(move || theme().border)
-        .bg(move || theme().card)
 }

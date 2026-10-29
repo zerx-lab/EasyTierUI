@@ -8,6 +8,7 @@ use nsh_core::prelude::*;
 use super::{nav, page_body, window_bar};
 use crate::{
     components::{ButtonKind, action_button},
+    pages,
     store::{Page, Store},
 };
 
@@ -73,7 +74,13 @@ fn header(store: Store, page: Option<Page>) -> View {
             text(title)
                 .text_xl()
                 .font_weight(FontWeight::SEMIBOLD)
+                .number_of_lines(1)
                 .role(AccessibilityRole::Header)
                 .text_color(move || theme().foreground),
+        )
+        .child(view().flex_1())
+        .child(
+            page.and_then(|page| pages::header_actions(store, page))
+                .map(|actions| view().flex_row().items_center().gap_2().child(actions)),
         )
 }

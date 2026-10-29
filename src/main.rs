@@ -10,7 +10,18 @@ use nsh_platform_macos as platform;
 use nsh_platform_windows as platform;
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-fn main() -> impl std::process::Termination {
+fn main() -> std::process::ExitCode {
+    // The elevated half of the OS-service install is this same executable (`core::sidecar::privileged`): answer it
+    // before any window or logger exists.
+    if let Some(code) = nsh_app_easytierui::core::sidecar::privileged::dispatch(std::env::args_os())
+    {
+        return std::process::ExitCode::from(code);
+    }
+    std::process::Termination::report(run())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+fn run() -> impl std::process::Termination {
     env_logger::init();
     platform::run_app(
         platform::AppSource::Rust(root()),

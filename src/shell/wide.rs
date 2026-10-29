@@ -13,6 +13,7 @@ use nsh_core::{
 use super::{nav, page_body};
 use crate::{
     components::{BarEdges, CONTROLS_GAP, bar_height, drag_region, sidebar_toggle},
+    pages,
     store::{Page, Store},
 };
 
@@ -135,7 +136,20 @@ fn page_header(store: Store) -> View {
             text(move || store.page().title(store.strings()))
                 .text_xl()
                 .font_weight(FontWeight::SEMIBOLD)
+                .number_of_lines(1)
                 .role(AccessibilityRole::Header)
                 .text_color(move || theme().foreground),
+        )
+        .child(view().flex_1())
+        // The page's own actions at the trailing edge; the header moves the window, its buttons still press.
+        .child(
+            view()
+                .flex_row()
+                .items_center()
+                .gap_2()
+                .child(dynamic(move || {
+                    let page = store.page();
+                    untracked(move || pages::header_actions(store, page))
+                })),
         )
 }

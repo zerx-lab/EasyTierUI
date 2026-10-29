@@ -24,8 +24,10 @@ pub fn shell(store: Store) -> AnyElement {
         set_title_bar(TitleBarStyle::Hidden, Some(TITLE_BAR_HEIGHT));
     }
     let compact = move || store.platform().is_mobile() || window().width < COMPACT_WIDTH;
-    when(compact, move || compact::compact(store))
-        .otherwise(move || wide::wide(store))
+    view()
+        .flex_1()
+        .child(when(compact, move || compact::compact(store)).otherwise(move || wide::wide(store)))
+        .child(pages::overlays(store))
         .into_element()
 }
 
@@ -39,7 +41,8 @@ fn window_bar() -> View {
     .border_color(move || theme().border)
 }
 
-/// The scrolling body of `page`, padded as a page.
+/// The scrolling body of `page`, padded as a page: a 24 pt gutter all round (`components::PAGE_GUTTER`, which a page's
+/// `toolbar()` cancels to span the page) and 24 pt between sections.
 fn page_body(store: Store, page: Page) -> Scroll {
     scroll()
         .flex_1()
