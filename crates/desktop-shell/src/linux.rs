@@ -139,3 +139,6 @@ pub(crate) fn request(action: Action) {
 
 /// The window manager decides focus on Linux: nothing to grant.
 pub(crate) fn allow_foreground() {}
+
+/// Only macOS takes the app out of its Dock while hidden: nothing to restore here.
+pub(crate) fn tray_gone() {}

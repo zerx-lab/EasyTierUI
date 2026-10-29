@@ -186,6 +186,8 @@ easytier-web --db <tmp>/et.db --api-server-addr 127.0.0.1   # a throwaway local 
   Desktop; phones and the web show that they belong to the desktop app. Closing the window hides it only while a tray
   icon exists to bring it back: a tray that cannot be made, or a Linux desktop without a StatusNotifierWatcher host,
   leaves closing to quit, and the switch says why. Quiet start hides the window at every launch and needs the tray.
+  On macOS a window hidden to the tray takes the app out of the Dock (accessory activation policy) until it shows
+  again; without a tray icon the app stays in the Dock, whose icon reopens the window.
 - **One instance per user**: the first holds `instance.lock` in the data directory and listens on a loopback port that
   only understands "show the window"; a later launch asks it to show and quits before its Store starts, so the same
   networks never run twice. Headless runs (no NSH window) skip it.

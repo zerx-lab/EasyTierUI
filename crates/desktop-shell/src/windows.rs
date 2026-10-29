@@ -295,3 +295,6 @@ pub(crate) fn allow_foreground() {
         log::debug!("the first instance may not come to the front: {error}");
     }
 }
+
+/// Only macOS takes the app out of its Dock while hidden: nothing to restore here.
+pub(crate) fn tray_gone() {}

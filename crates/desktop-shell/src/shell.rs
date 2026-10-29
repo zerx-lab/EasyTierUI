@@ -148,6 +148,7 @@ impl Drop for Shell {
         platform::run_on_ui(|| {
             KEEP.set(false);
             drop(TRAY.take());
+            platform::tray_gone();
         });
     }
 }
@@ -171,7 +172,11 @@ fn apply_keep(on: bool) {
     } else if !on {
         drop(TRAY.take());
     }
-    KEEP.set(on && TRAY.with_borrow(Option::is_some));
+    let keep = on && TRAY.with_borrow(Option::is_some);
+    KEEP.set(keep);
+    if !keep {
+        platform::tray_gone();
+    }
 }
 
 /// Does `action` on the UI thread (where the platform's posted requests land).

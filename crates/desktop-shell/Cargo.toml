@@ -60,6 +60,7 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
     "objc2-core-foundation",
     "NSApplication",
     "NSResponder",
+    "NSRunningApplication",
     "NSWindow",
 ] }
 # The main queue: requests from the tray's and the instance listener's threads run on AppKit's thread.

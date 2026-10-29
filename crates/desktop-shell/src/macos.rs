@@ -2,8 +2,9 @@
 //! stops the engine. A stand-in delegate takes its place and answers `windowShouldClose:` itself while the app keeps
 //! to the tray (the window orders out, the close is refused); everything else is forwarded to NSH's delegate. Work
 //! from other threads (the app's engine thread, the tray's and the instance listener's) goes through the main dispatch
-//! queue, which also waits for AppKit's run loop that status items need. Clicking the Dock icon reopens the window
-//! through NSH's own reopen handler.
+//! queue, which also waits for AppKit's run loop that status items need. While the window is hidden to the tray the
+//! app leaves the Dock (the accessory activation policy) and returns to it when the window shows; without a tray icon
+//! it stays in the Dock, whose icon reopens the window through NSH's own reopen handler.
 #![expect(
     unsafe_code,
     reason = "a window delegate is an Objective-C class (`define_class!`) whose `init` is a message send; the user's \
@@ -19,7 +20,7 @@ use objc2::{
     runtime::{AnyClass, Bool, NSObject, NSObjectProtocol, ProtocolObject},
     sel,
 };
-use objc2_app_kit::{NSApplication, NSWindow, NSWindowDelegate};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSWindow, NSWindowDelegate};
 use objc2_foundation::NSNotification;
 
 use crate::{
@@ -50,6 +51,7 @@ define_class!(
         fn window_should_close(&self, window: &NSWindow) -> Bool {
             if shell::keeps_in_tray() {
                 window.orderOut(None);
+                leave_dock(window.mtm());
                 return Bool::NO;
             }
             let inner = &self.ivars().inner;
@@ -85,6 +87,18 @@ fn window(mtm: MainThreadMarker) -> Option<Retained<NSWindow>> {
         .windows()
         .iter()
         .find(|window| window.delegate().is_some())
+}
+
+/// Hidden to the tray: the Dock icon goes, the tray icon is the way back.
+fn leave_dock(mtm: MainThreadMarker) {
+    set_policy(mtm, NSApplicationActivationPolicy::Accessory);
+}
+
+fn set_policy(mtm: MainThreadMarker, policy: NSApplicationActivationPolicy) {
+    let app = NSApplication::sharedApplication(mtm);
+    if app.activationPolicy() != policy && !app.setActivationPolicy(policy) {
+        log::warn!("the activation policy did not change to {policy:?}");
+    }
 }
 
 pub(crate) fn tray_host_known() -> Option<bool> {
@@ -133,14 +147,27 @@ pub(crate) fn show_window() {
     if window.isMiniaturized() {
         window.deminiaturize(None);
     }
+    // Back in the Dock before activating: an accessory app gets no menu bar.
+    set_policy(mtm, NSApplicationActivationPolicy::Regular);
     // Activating first: ordering a window front in an inactive app leaves it behind the active one.
     NSApplication::sharedApplication(mtm).activate();
     window.makeKeyAndOrderFront(None);
 }
 
 pub(crate) fn hide_window() {
-    if let Some(window) = MainThreadMarker::new().and_then(window) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    if let Some(window) = window(mtm) {
         window.orderOut(None);
+        leave_dock(mtm);
+    }
+}
+
+/// Without a tray icon the Dock icon is the only way back to a hidden window: the app returns to the Dock.
+pub(crate) fn tray_gone() {
+    if let Some(mtm) = MainThreadMarker::new() {
+        set_policy(mtm, NSApplicationActivationPolicy::Regular);
     }
 }
 
