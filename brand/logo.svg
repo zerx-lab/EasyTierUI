@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="EasyTierUI">
+<style>
+.edge{fill:none;stroke:#16181d}.node{fill:#16181d}.lamp{fill:#3156d3}
+@media (prefers-color-scheme:dark){.edge{stroke:#eceef2}.node{fill:#eceef2}.lamp{fill:#7896ff}}
+</style>
+<path class="edge" d="M50 16L16 50L50 84L84 50Z M50 16V84 M16 50H84" stroke-width="6" stroke-linejoin="round"/>
+<g class="node"><circle cx="50" cy="16" r="10"/><circle cx="16" cy="50" r="10"/><circle cx="50" cy="84" r="10"/></g>
+<circle class="lamp" cx="84" cy="50" r="12"/>
+</svg>
